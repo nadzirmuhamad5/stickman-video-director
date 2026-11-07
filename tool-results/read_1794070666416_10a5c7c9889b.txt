@@ -1,0 +1,576 @@
+     1→<div align="center">
+     2→
+     3→[🇺🇸 EN](README.en.md) · [🇨🇳 简中](README.zh-CN.md) · [🇯🇵 日本語](README.ja.md) · [🇰🇷 한국어](README.ko.md) · [🇫🇷 FR](README.fr.md) · [🇧🇷 PT-BR](README.pt-BR.md) · [🇹🇷 TR](README.tr.md) · [**🇮🇩 ID**](README.id.md)
+     4→
+     5→# 🎬 Stickman Video Director
+     6→
+     7→**Ubah naskah apa pun menjadi video animasi stickman viral dalam berbagai gaya untuk channel YouTube tanpa tampil di kamera. Sepenuhnya open source.**
+     8→
+     9→[![GitHub Stars](https://img.shields.io/github/stars/kaomei/stickman-video-director?style=flat-square)](https://github.com/kaomei/stickman-video-director/stargazers)
+    10→![MIT License](https://img.shields.io/badge/License-MIT-16a34a?style=flat-square)
+    11→
+    12→Mulai dari topik, artikel, atau naskah. Susun visual, narasi, subtitle, dan efek suara secara otomatis menjadi video stickman yang siap dipublikasikan.
+    13→
+    14→**⚡ 100% gratis dan open source. Tanpa kamera, tanpa langganan US$50/bulan, dan siap dalam hitungan menit, bukan hari.**
+    15→
+    16→Gaya visual terus diperbarui untuk channel **penjelasan sains, psikologi gelap, fabel teknologi, kisah viral, dan storytelling.**
+    17→
+    18→</div>
+    19→
+    20→<table width="100%">
+    21→<tr>
+    22→<td width="50%" align="center">
+    23→<strong>Hitam Putih Klasik</strong><br>
+    24→<a href="#a1"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@2697fac5e0466f44098148a52c9648697521b3d6/assets/readme/previews/dark-theme-demo.gif" alt="Animasi stickman hitam putih klasik dengan garis putih di latar hitam" width="90%"></a>
+    25→</td>
+    26→<td width="50%" align="center">
+    27→<strong>Pop Modern</strong><br>
+    28→<a href="#a2"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@2697fac5e0466f44098148a52c9648697521b3d6/assets/readme/previews/style-2a-demo.gif" alt="Stickman berkupluk merah dengan efek cahaya teknologi modern" width="90%"></a>
+    29→</td>
+    30→</tr>
+    31→<tr>
+    32→<td width="50%" align="center">
+    33→<strong>Gua Prasejarah</strong><br>
+    34→<a href="#a3"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@2697fac5e0466f44098148a52c9648697521b3d6/assets/readme/previews/style-3-demo.gif" alt="Cerita stickman di gua prasejarah dengan kejutan komedi" width="90%"></a>
+    35→</td>
+    36→<td width="50%" align="center">
+    37→<strong>Cerita Hangat</strong><br>
+    38→<a href="#a4"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@2697fac5e0466f44098148a52c9648697521b3d6/assets/readme/previews/style-4-cozy-cafe.gif" alt="Karakter stickman ekspresif di latar keseharian penuh warna" width="90%"></a>
+    39→</td>
+    40→</tr>
+    41→<tr>
+    42→<td width="50%" align="center">
+    43→<strong>Kartun Sejarah</strong><br>
+    44→<a href="#style-5"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@2697fac5e0466f44098148a52c9648697521b3d6/assets/readme/previews/style-5-japan-hero.gif" alt="Animasi stickman sejarah di Jepang zaman Edo" width="90%"></a>
+    45→</td>
+    46→<td width="50%" align="center">
+    47→<strong>Seni Garis Minimalis</strong><br>
+    48→<a href="#b1"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@fa0a68d1ccf9fd057230abab2af832f768debe86/assets/readme/previews/b1-minimal-handdrawn.gif" alt="Video stickman sketsa tangan minimalis dengan karakter ekspresif, teks utama, dan animasi ringan" width="90%"></a>
+    49→</td>
+    50→</tr>
+    51→<tr>
+    52→<td width="50%" align="center">
+    53→<strong>Amber Noir</strong><br>
+    54→<a href="#a6"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@828b865b37cbff61464b9c00e04bce79f79b3b5c/assets/readme/previews/style-6-amber-noir-flow.gif" alt="Animasi stickman Amber Noir: karakter berhoodie oranye di kota bercahaya hangat dengan bayangan pekat" width="90%"></a>
+    55→</td>
+    56→<td width="50%" align="center">
+    57→<strong>Gambar Tangan Berwarna</strong><br>
+    58→<a href="#b2"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@eb24085d20aea0efe37c0862cfcd0516b57dadf7/assets/readme/previews/b2-colorful-sleep.gif" alt="Video figur stik gambar tangan berwarna: kamar tenang dan pikiran yang mengalir bersama sungai" width="90%"></a>
+    59→</td>
+    60→</tr>
+    61→<!-- b3:hero:start -->
+    62→<tr>
+    63→<td width="50%" align="center">
+    64→<strong>Gaya TV Retro</strong><br>
+    65→<a href="#b3"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@eb24085d20aea0efe37c0862cfcd0516b57dadf7/assets/readme/previews/b3-tv-night-signal.gif" alt="Misteri fiksi TV pukul 3 pagi dengan karakter putih membulat" width="90%"></a>
+    66→</td>
+    67→<td width="50%" align="center">
+    68→<strong>Thriller Bertahan Hidup</strong><br>
+    69→<a href="#b4"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@eb24085d20aea0efe37c0862cfcd0516b57dadf7/assets/readme/previews/b4-dispatch.gif" alt="B4 · Thriller Bertahan Hidup" width="90%"></a>
+    70→</td>
+    71→</tr>
+    72→<!-- b3:hero:end -->
+    73→</table>
+    74→
+    75→<div align="center">
+    76→
+    77→**10 gaya visual · Contoh yang sudah diuji · Gratis dan open source**
+    78→
+    79→⭐ **Beri Star pada proyek ini agar tidak ketinggalan gaya dan fitur baru berikutnya.**
+    80→
+    81→[Mulai di sini](#quick-start) · [Gaya Director](#a-styles) · [Gaya Autopilot](#b-styles) · [Tanya jawab](#faq) · [Peta jalan](#road-to-10000-stars--creator-ecosystem)
+    82→
+    83→</div>
+    84→
+    85→<a id="creation-modes"></a>
+    86→
+    87→## 🎬 Dua mode pembuatan video
+    88→
+    89→**Ingin mengontrol setiap shot? Pilih A · Director Mode. Ingin video jadi tanpa merangkai adegan sendiri? Pilih B · Autopilot Mode.** Satu proyek, dua alur kerja.
+    90→
+    91→|  | <div align="center">A · Director</div> | <div align="center">B · Autopilot</div> |
+    92→|:---:|:---|:---|
+    93→| **Cara kerja** | **Anda mengendalikan produksi, AI menyusun arahan:** dapatkan storyboard dan prompt, lalu atur sendiri pembuatan klip dan editing. | **Berikan topik atau kebutuhan, terima video jadi:** ilustrasi, narasi, subtitle, animasi ringan, dan penggabungan video dikerjakan otomatis. |
+    94→| **Durasi** | **Diutamakan untuk video pendek**, misalnya 30 detik–3 menit; video lebih panjang juga bisa dibuat per bagian. | **Diutamakan untuk video panjang**, terutama video bernarasi **10 menit ke atas**; juga mendukung video pendek dan cerita bersambung. |
+    95→| **Alat** | Rencanakan dengan asisten AI yang mendukung Skill, buat klip di generator video pilihan Anda (Google Flow, Runway, Luma, Kling, dan lainnya), lalu susun di CapCut atau Premiere. | Dijalankan melalui agen seperti **Codex atau Claude Code** yang dapat membaca dan menulis file, memakai alat, serta menjalankan perintah untuk menghubungkan pembuatan materi dengan penggabungan video lokal. |
+    96→| **Visual** | **Animasi per adegan:** berfokus pada gerakan, arahan kamera, dan interaksi karakter. | **Storyboard ilustrasi + animasi ringan:** pergantian adegan, zoom, dan pergeseran kamera mengikuti narasi, tanpa harus menghasilkan animasi penuh untuk setiap bagian. |
+    97→| **Hasil** | Rancangan penyutradaraan, storyboard, prompt video per bagian, dan arahan suara. | **File video lengkap dengan narasi, subtitle, dan animasi ringan.** |
+    98→| **Mulai** | <div align="center"><a href="#director-start">Gunakan mode Director</a></div> | <div align="center"><a href="#autopilot-start">Gunakan mode Autopilot</a></div> |
+    99→
+   100→Kedua alur kerja bisa dimulai dari topik mentah, tautan web, atau naskah lengkap. Pilih rasio aspek (9:16, 16:9, 1:1), bahasa narasi, dan suara dengan bebas. Durasi di atas adalah rekomendasi, bukan batas mutlak.
+   101→
+   102→💡 **Catatan Penyiapan Cepat**:
+   103→
+   104→- **Director Mode** dapat digunakan di jendela percakapan AI standar.
+   105→- **Autopilot Mode** berjalan di agen coding AI dengan akses file dan terminal (seperti **Claude Code, OpenAI Codex, atau Cursor**) untuk menangani rendering hingga penyerahan file secara otomatis.
+   106→
+   107→<a id="quick-start"></a>
+   108→
+   109→## 🧭 Mulai di sini
+   110→
+   111→**Agar hasilnya sedekat mungkin dengan contoh, saya menyarankan untuk mulai dengan Codex.** Contoh buatan saya di proyek ini dibuat dan diuji menggunakan Codex.
+   112→
+   113→Skill juga dapat dipasang di Claude Code, Cursor, Antigravity, atau agent lain yang memiliki akses file dan terminal. Namun, perbedaan kemampuan model, konfigurasi alat, dan cara eksekusi dapat menghasilkan keluaran yang berbeda.
+   114→
+   115→Kirim pesan berikut ke asisten AI Anda:
+   116→
+   117→```text
+   118→Tolong pasangkan Skill ini:
+   119→https://github.com/kaomei/stickman-video-director
+   120→
+   121→Setelah berhasil dipasang, segera baca SKILL.md yang terpasang.
+   122→Jelaskan dengan bahasa sederhana hasil dari kedua mode,
+   123→alat yang diperlukan, serta alur pembuatannya.
+   124→Berikan contoh permintaan yang bisa saya sesuaikan.
+   125→Berdasarkan kebutuhan saya, jelaskan apa yang masih kurang
+   126→dan langkah berikutnya secara konkret.
+   127→```
+   128→
+   129→<a id="director-start"></a>
+   130→
+   131→### A · Director: prompt video per adegan
+   132→
+   133→Setelah memasang Skill, kirim pesan ini ke asisten AI dan ganti dengan topik Anda:
+   134→
+   135→```text
+   136→Gunakan mode Director / mode A untuk mengubah topik,
+   137→teks, atau kebutuhan berikut menjadi video stickman:
+   138→[Tulis topik, tempel teks, atau jelaskan kebutuhan Anda]
+   139→
+   140→Kebutuhan: horizontal 16:9, gaya A3 “Gua Prasejarah”.
+   141→Buat 30 detik dulu.
+   142→Berikan rancangan penyutradaraan terlebih dahulu.
+   143→Setelah saya setujui, berikan prompt video untuk setiap bagian.
+   144→```
+   145→
+   146→**Alur: topik dan kebutuhan → naskah cerita → konfirmasi tiga tampak karakter bila diperlukan → prompt adegan terperinci → hasilkan klip dan edit menjadi video secara manual**
+   147→
+   148→Rancangan mencakup struktur cerita, narasi per bagian, gerakan, kamera, dan arahan suara. Setelah menerima prompt, salin satu per satu ke [Google Flow](https://flow.google.com/) atau alat pembuat video lain. Gunakan CapCut atau editor lain untuk menambahkan subtitle dan menyelesaikan video.
+   149→
+   150→Untuk video pertama Anda, ikuti [panduan produksi visual di X](https://x.com/CrazyKaomei/status/2102311241046008268) (utas dengan demo video langkah demi langkah).
+   151→
+   152→<a id="autopilot-start"></a>
+   153→
+   154→### B · Autopilot: dari satu permintaan menjadi video lengkap
+   155→
+   156→Setelah memasang Skill di lingkungan yang bisa mengakses file dan menjalankan perintah, seperti Codex atau Claude Code, katakan:
+   157→
+   158→```text
+   159→Gunakan mode Autopilot / mode B untuk mengubah topik, artikel,
+   160→postingan, berita, atau kebutuhan berikut menjadi video
+   161→yang menarik untuk YouTube:
+   162→[Tempel konten atau tautan, atau jelaskan kebutuhan video promosi]
+   163→
+   164→Kebutuhan: 5–10 menit, horizontal 16:9, gaya B1
+   165→“Seni Garis Minimalis”, dengan narasi, subtitle, dan efek suara.
+   166→
+   167→Periksa dahulu konfigurasi gambar, suara, dan penggabungan video.
+   168→Lalu berikan naskah dan contoh video 20 detik dengan audio.
+   169→Setelah saya setujui, selesaikan seluruh video secara otomatis,
+   170→dengan visual mengikuti ritme narasi. Kirim file video lengkap,
+   171→tanpa perlu saya rangkai per bagian secara manual.
+   172→```
+   173→
+   174→**Alur: topik, konten, atau kebutuhan → setujui naskah → setujui contoh 20 detik dengan audio → produksi otomatis → terima video lengkap**
+   175→
+   176→Asisten AI merancang adegan, menghasilkan gambar dan narasi, menyiapkan subtitle dan efek suara, lalu merangkainya mengikuti ritme suara. Anda cukup menyetujui naskah dan contoh video, tanpa membuat serta menyambung setiap bagian sendiri.
+   177→
+   178→Saat pertama digunakan, asisten memeriksa konfigurasi dan menjelaskan apa yang belum tersedia serta cara melengkapinya. Jika gambar atau suara kurang cocok, bagian tersebut bisa disesuaikan tanpa mengulang bagian yang sudah disetujui.
+   179→
+   180→**Tahap akhir opsional untuk kedua mode:** setelah menyetujui video final, lanjutkan ke [Kit Thumbnail & Publikasi](#thumbnail-publishing-kit) untuk membuat sampul dengan gaya yang sama dan teks unggahan, atau selesai di sini. Tidak perlu berganti mode atau menginstal ulang.
+   181→
+   182→<a id="style-gallery"></a>
+   183→
+   184→<a id="a-styles"></a>
+   185→
+   186→## 🎨 Pilihan gaya A · Director
+   187→
+   188→Diperbarui dengan penomoran A1, A2, A3… Setiap gaya memiliki contoh animasinya sendiri.
+   189→
+   190→<a id="a1"></a>
+   191→
+   192→### A1: Hitam Putih Klasik
+   193→
+   194→Kepala bulat dan beberapa garis bisa membuat ide rumit terasa jelas. Kecemasan menjadi sangkar; perhatian menjadi baterai yang hampir habis. Tanpa hiasan berlebih, setiap ekspresi dan perumpamaan jadi berarti.
+   195→
+   196→- **Tampilannya**: Garis hitam di atas putih atau putih di atas hitam, dengan sedikit warna cerah untuk menyorot inti.
+   197→- **Cocok untuk**: Sains, psikologi, pengembangan diri, bisnis, dan konsep yang terbantu oleh analogi visual.
+   198→
+   199→| A1.1 · Stickman hitam di latar putih | A1.2 · Stickman putih di latar hitam |
+   200→|:---:|:---:|
+   201→| <!-- demo:light:start --><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@2697fac5e0466f44098148a52c9648697521b3d6/assets/readme/previews/light-theme-demo.gif" alt="A1.1: animasi stickman hitam di latar putih" width="360"><!-- demo:light:end --> | <!-- demo:dark:start --><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@2697fac5e0466f44098148a52c9648697521b3d6/assets/readme/previews/dark-theme-demo.gif" alt="A1.2: animasi stickman putih di latar hitam" width="360"><!-- demo:dark:end --> |
+   202→| Latar putih · Karakter hitam | Latar hitam · Karakter putih |
+   203→
+   204→---
+   205→
+   206→<a id="a2"></a>
+   207→
+   208→### A2: Pop Modern
+   209→
+   210→Kupluk merah, kaus kuning: tokoh yang langsung dikenali. Ikuti ia dari antarmuka teknologi melayang ke jalanan dan alam, mengubah demo alat atau titik balik kehidupan menjadi cerita berpusat pada karakter.
+   211→
+   212→- **Tampilannya**: Minimal Tech memakai ruang putih dan antarmuka kaca; Colorful Story menambah latar kaya, kedalaman, dan cahaya sesuai suasana.
+   213→- **Cocok untuk**: Alat AI, produk teknologi, tutorial, pertumbuhan pribadi, pengalaman sehari-hari, dan petualangan.
+   214→
+   215→| A2.1 · Teknologi Minimalis | A2.2 · Cerita Berwarna |
+   216→|:---:|:---:|
+   217→| <img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@2697fac5e0466f44098148a52c9648697521b3d6/assets/readme/previews/style-2a-demo.gif" alt="A2.1: animasi teknologi minimalis dengan karakter berkupluk merah" width="360"> | <img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@2697fac5e0466f44098148a52c9648697521b3d6/assets/readme/previews/style-2b-demo.gif" alt="A2.2: karakter berkupluk merah di latar sinematik berwarna" width="360"> |
+   218→| Ruang putih · Kisi samar · Cahaya sian | Latar berwarna · Cahaya sinematik · Suasana cerita |
+   219→
+   220→---
+   221→
+   222→<a id="a3"></a>
+   223→
+   224→### A3: Gua Prasejarah
+   225→
+   226→Tak ada ponsel atau kantor. Kenapa manusia gua tetap terjebak pekerjaan? Gaya visualnya terinspirasi oleh [@Zenn0009](https://www.youtube.com/@Zenn0009) di YouTube (**200 ribu subscriber**). Bawa masalah modern ke tengah gua, api unggun, dan kulit binatang; kekesalan sehari-hari berubah jadi kisah absurd dengan sindiran tajam.
+   227→
+   228→- **Tampilannya**: Garis kasar, warna bumi, reaksi besar. Interaksi, potongan reaksi, dan jeda komedi membangun cerita.
+   229→- **Cocok untuk**: Satire kerja, sifat manusia, pengandaian prasejarah, komedi gelap, fabel, dan cerita belajar bahasa Inggris untuk anak.
+   230→
+   231→| Contoh 1: “Dari Mana Datangnya Pekerjaan Pertama Manusia?” | Contoh 2: “Manusia Pertama Kali Menemukan Api” |
+   232→|:---:|:---:|
+   233→| <img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@2697fac5e0466f44098148a52c9648697521b3d6/assets/readme/previews/style-3-demo.gif" alt="Pratinjau Dari Mana Datangnya Pekerjaan Pertama Manusia?" width="360"> | <img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@2697fac5e0466f44098148a52c9648697521b3d6/assets/readme/previews/style-3-community-fire.gif" alt="Manusia Pertama Kali Menemukan Api, animasi karya komunitas" width="360"> |
+   234→| Cerita prasejarah · Kejutan dunia kerja | Penemuan api · Karya komunitas |
+   235→
+   236→---
+   237→
+   238→<a id="a4"></a>
+   239→
+   240→### A4: Cerita Hangat
+   241→
+   242→Pesan yang rasanya harus segera dibalas. Sore yang akhirnya Anda simpan untuk diri sendiri. Stasiun, kamar, dan kafe kecil memberi tempat bagi perasaan yang sulit dijelaskan.
+   243→
+   244→- **Tampilannya**: Latar keseharian berwarna, cahaya lembut, gestur sederhana. Close-up menangkap keraguan; gambar lebar memberi ruang bernapas.
+   245→- **Cocok untuk**: Hubungan, emosi, kebiasaan, pertumbuhan diri, serta cerita hangat yang tetap mengakui cemas dan lelah.
+   246→
+   247→| Contoh 1: Cemas Membalas Pesan Saat di Perjalanan | Contoh 2: Meluangkan Waktu untuk Diri Sendiri |
+   248→|:---:|:---:|
+   249→| <img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@2697fac5e0466f44098148a52c9648697521b3d6/assets/readme/previews/style-4-cozy-station.gif" alt="Karakter yang cemas membalas pesan di stasiun" width="360"> | <img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@2697fac5e0466f44098148a52c9648697521b3d6/assets/readme/previews/style-4-cozy-cafe.gif" alt="Beristirahat di kafe terbuka yang bermandikan sinar matahari" width="360"> |
+   250→| Stasiun · Kamera mengikuti karakter · Close-up emosional | Kafe terbuka · Cahaya hangat · Gerak keseharian |
+   251→
+   252→---
+   253→
+   254→<a id="style-5"></a>
+   255→<a id="a5"></a>
+   256→
+   257→### A5: Kartun Sejarah
+   258→
+   259→Samurai juga punya tagihan. Kucing Mesir bisa mencuri perhatian. Di jalan dan kuil masa lalu, detail sejarah menjadi kejadian nyata yang harus dihadapi seorang tokoh.
+   260→
+   261→- **Tampilannya**: Kepala putih bulat, garis tegas, latar zaman yang penuh warna. Busana dan bangunan menetapkan masa; reaksi dan kontras menghidupkannya.
+   262→- **Cocok untuk**: Sejarah dunia, peradaban, keseharian masa lalu, tokoh sejarah, dan cerita sejarah yang jenaka.
+   263→
+   264→| Contoh 1: Keseharian di Jepang Zaman Edo | Contoh 2: Kucing dan Mumi di Mesir Kuno |
+   265→|:---:|:---:|
+   266→| <img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@2697fac5e0466f44098148a52c9648697521b3d6/assets/readme/previews/style-5-japan.gif" alt="Keseharian seorang samurai di Jepang zaman Edo" width="360"> | <img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@2697fac5e0466f44098148a52c9648697521b3d6/assets/readme/previews/style-5-egypt.gif" alt="Kucing hitam dan mumi di kuil Mesir Kuno" width="360"> |
+   267→| Jalanan Edo · Pakaian samurai · Kejutan sehari-hari | Latar kuil berwarna · Kucing hitam · Keunikan sejarah |
+   268→
+   269→Kontribusi gaya dan prompt: [Lawal Ridwan / @leksautomate](https://github.com/leksautomate).
+   270→
+   271→---
+   272→
+   273→<a id="a6"></a>
+   274→
+   275→### A6: Amber Noir
+   276→
+   277→Bagaimana jika saat bangun, semua barang sepuluh ribu kali lebih murah? Inspirasi visualnya berasal dari [@IfverseTales](https://www.youtube.com/@IfverseTales) di YouTube (**bertambah 60 ribu subscriber dalam 3 minggu**). Sosok berhoodie oranye bergerak di antara cahaya emas dan bayangan ungu tua, mengubah pengandaian menjadi godaan dan konsekuensi tak terduga.
+   278→
+   279→- **Tampilannya**: Sorotan ambar, siluet gelap, kota berlapis. Tindakan tokoh dan kamera terkendali membangun rasa ingin tahu.
+   280→- **Cocok untuk**: Pengandaian, fabel modern, psikologi, penemuan mengejutkan, dan cerita berbalik arah.
+   281→
+   282→| Contoh 1: Bagaimana jika semua barang 10.000 kali lebih murah? | Contoh 2: Era Runtuhnya Harga |
+   283→|:---:|:---:|
+   284→| <a href="assets/readme/style-6-amber-noir-mcp.mp4"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@828b865b37cbff61464b9c00e04bce79f79b3b5c/assets/readme/previews/style-6-amber-noir-mcp.gif" alt="Amber Noir: cerita 20 detik tentang dunia dengan harga yang turun dalam semalam" width="360"></a> | <a href="assets/readme/style-6-amber-noir-flow.mp4"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@828b865b37cbff61464b9c00e04bce79f79b3b5c/assets/readme/previews/style-6-amber-noir-flow.gif" alt="Amber Noir: adegan animasi 8 detik dengan karakter berhoodie oranye di depan toko" width="360"></a> |
+   285→| Contoh Renoise MCP · 20 detik · Narasi: Tim | Contoh Google Flow · 8 detik · Audio bawaan model |
+   286→
+   287→---
+   288→
+   289→<a id="a7"></a>
+   290→
+   291→### A7: Segera hadir…
+   292→
+   293→Gaya khusus Director yang baru sedang dilatih. [Beri Star pada proyek ini](#road-to-10000-stars--creator-ecosystem) untuk membukanya saat mencapai 5,000 Stars!
+   294→
+   295→---
+   296→
+   297→<a id="b-styles"></a>
+   298→
+   299→## 🤖 Pilihan gaya B · Autopilot
+   300→
+   301→Diperbarui dengan penomoran B1, B2, B3… Setiap gaya memiliki contoh video dengan storyboard ilustrasi dan animasi ringan, dikelola terpisah dari seri A.
+   302→
+   303→<a id="b1"></a>
+   304→
+   305→### B1: Seni Garis Minimalis
+   306→
+   307→Seperti teman yang menggambar sambil menjelaskan. Wajah ekspresif, garis hitam, dan beberapa benda berwarna mengubah pengetahuan abstrak dan manfaat produk menjadi situasi yang akrab.
+   308→
+   309→- **Tampilannya**: Kertas nyaris putih, goresan hidup, teks inti yang berguna. Ekspresi, properti, dan gerak halus menjelaskan tanpa menyesakkan layar.
+   310→- **Cocok untuk**: Video penjelasan YouTube, pendidikan, psikologi, pengembangan diri, cerita kerja, dan pengenalan produk.
+   311→
+   312→<table width="100%">
+   313→  <tr>
+   314→    <th width="50%" align="center">Contoh 1: Bikin Konten YouTube Tanpa Tampil di Kamera</th>
+   315→    <th width="50%" align="center">Contoh 2: Posting Tiap Hari, Kenapa Tetap Tak Ada yang Menonton?</th>
+   316→  </tr>
+   317→  <tr>
+   318→    <td width="50%" align="center"><a href="assets/readme/b1-minimal-handdrawn.mp4"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@fa0a68d1ccf9fd057230abab2af832f768debe86/assets/readme/previews/b1-minimal-handdrawn.gif" alt="Contoh B1 Seni Garis Minimalis: klik untuk menonton atau mengunduh contoh bersuara tentang membuat konten YouTube tanpa tampil di kamera" width="360"></a></td>
+   319→    <td width="50%" align="center"><a href="skills/directing-stickman-videos/assets/b1/approved-2026-10-23.mp4"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@61e202ccecf9d9926cf76e13f3284181297729b8/assets/readme/previews/b1-minimal-handdrawn-2026-10-23.gif" alt="Contoh B1 Seni Garis Minimalis: klik untuk menonton atau mengunduh contoh dengan suara Bodi, subtitle, karakter gambar tangan, dan animasi ringan" width="360"></a></td>
+   320→  </tr>
+   321→  <tr>
+   322→    <td align="center">Karakter gambar tangan · Teks utama · Animasi ringan</td>
+   323→    <td align="center">Narasi Bodi · Ekspresi hidup · Animasi ringan</td>
+   324→  </tr>
+   325→</table>
+   326→
+   327→---
+   328→
+   329→<a id="b2"></a>
+   330→
+   331→### B2: Gambar Tangan Berwarna
+   332→
+   333→Kenapa pikiran justru makin ramai saat Anda berusaha tidur? Terinspirasi oleh [@PsychToonsHQ](https://www.youtube.com/@PsychToonsHQ) di YouTube (**200 ribu subscriber**), kertas hangat dan warna lembut mengubah insomnia, menunda pekerjaan, dan distraksi menjadi kisah yang terasa dekat.
+   334→
+   335→- **Tampilannya**: Garis tipis, latar keseharian berwarna, takarir kertas gading. Close-up, metafora visual, dan gerak lembut mengungkap psikologi kebiasaan.
+   336→- **Cocok untuk**: Psikologi sehari-hari, tidur, kebiasaan, perhatian, pertumbuhan diri, dan penjelasan kehidupan yang relevan.
+   337→
+   338→<table width="100%">
+   339→  <tr>
+   340→    <th width="50%" align="center">Contoh 1: Kenapa Makin Ingin Tidur, Makin Terjaga?</th>
+   341→    <th width="50%" align="center">Contoh 2: Ponsel Sudah Terbuka, Tapi Lupa Mau Apa</th>
+   342→  </tr>
+   343→  <tr>
+   344→    <td width="50%" align="center"><a href="assets/readme/b2-colorful-sleep.mp4"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@eb24085d20aea0efe37c0862cfcd0516b57dadf7/assets/readme/previews/b2-colorful-sleep.gif" alt="B2 Gambar Tangan Berwarna: kamar tenang, perahu kertas di sungai, dan suasana menjelang tidur yang lebih damai" width="360"></a></td>
+   345→    <td width="50%" align="center"><a href="assets/readme/b2-colorful-phone-weather.mp4"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@eb24085d20aea0efe37c0862cfcd0516b57dadf7/assets/readme/previews/b2-colorful-phone-weather.gif" alt="B2 Gambar Tangan Berwarna: terdistraksi saat mengecek ponsel, dengan narasi, subtitle gading, dan latar ilustrasi" width="360"></a></td>
+   346→  </tr>
+   347→  <tr>
+   348→    <td align="center">Pikiran sebelum tidur · Potongan pemandangan · Gerakan lembut</td>
+   349→    <td align="center">Distraksi sehari-hari · Latar berwarna · Narasi Fola</td>
+   350→  </tr>
+   351→</table>
+   352→
+   353→---
+   354→
+   355→<!-- b3:section:start -->
+   356→<a id="b3"></a>
+   357→
+   358→### B3: Gaya TV Retro
+   359→
+   360→Seperti tak sengaja menemukan siaran aneh larut malam. Terinspirasi oleh [@BradikininVideos](https://www.youtube.com/@BradikininVideos) di YouTube (**bertambah 55 ribu subscriber dalam 3 minggu**), tokoh putih-abu, cahaya tipis, dan tekstur analog mengubah pertanyaan biasa menjadi penemuan.
+   361→
+   362→- **Tampilannya**: Tokoh bercahaya di layar gelap, teks putih bersih, garis pindai halus. Perpindahan adegan dan reaksi kecil memberi sains rasa bermain, serta misteri ketegangan.
+   363→- **Cocok untuk**: Sains keseharian, psikologi, perilaku hewan, fakta unik, dan misteri pendek.
+   364→
+   365→<table width="100%">
+   366→  <tr>
+   367→    <th width="50%" align="center">Contoh 1: Bagaimana jika TV menyala sendiri pukul 3 pagi?</th>
+   368→    <th width="50%" align="center">Contoh 2: Anjingmu Merasa Bersalah — atau Justru Takut?</th>
+   369→  </tr>
+   370→  <tr>
+   371→    <td width="50%" align="center"><a href="assets/readme/b3-tv-night-signal.mp4"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@eb24085d20aea0efe37c0862cfcd0516b57dadf7/assets/readme/previews/b3-tv-night-signal.gif" alt="Misteri fiksi TV pukul 3 pagi dengan karakter putih membulat" width="360"></a></td>
+   372→    <td width="50%" align="center"><a href="assets/readme/b3-tv-dog.mp4"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@eb24085d20aea0efe37c0862cfcd0516b57dadf7/assets/readme/previews/b3-tv-dog.gif" alt="Penjelasan perilaku anjing dengan karakter putih-abu dan animasi lokal" width="360"></a></td>
+   373→  </tr>
+   374→  <tr>
+   375→    <td align="center">Suspense fiksi · Pergantian adegan · Tekstur TV</td>
+   376→    <td align="center">Perilaku hewan · Reaksi lokal · Narasi Bodi</td>
+   377→  </tr>
+   378→</table>
+   379→<!-- b3:section:end -->
+   380→
+   381→<!-- b4:section:start -->
+   382→<a id="b4"></a>
+   383→
+   384→### B4: Thriller Bertahan Hidup
+   385→
+   386→Hitung mundur. Telepon larut malam. Aturan yang tak boleh dilanggar. Terinspirasi oleh [@BeanieSurvives](https://www.youtube.com/@BeanieSurvives) di YouTube (**bertambah 100 ribu subscriber dalam 3 minggu**), tempat biasa berubah menjadi jebakan. Kepala putih bulat, sarung tangan putih, dan kontras tajam membawa tokoh sederhana ke dunia yang meresahkan.
+   387→
+   388→- **Tampilannya**: Pembuka setengah berbayang, close-up mengusik, ancaman muncul dari gelap. Perubahan ekspresi, cahaya, dan benda membangun ketegangan tanpa menjelaskan setiap gambar.
+   389→- **Suara**: Brian menarik perhatian sejak awal. Ambiens pelan yang terus mengalir menopang ketegangan; efek sesuai cerita membuat bahaya terdengar tanpa menutupi narasi.
+   390→- **Cocok untuk**: Aturan bertahan hidup, legenda urban, pelarian dari bencana, dan ketegangan dengan kejutan.
+   391→
+   392→<table width="100%">
+   393→  <tr>
+   394→    <th width="50%" align="center">Contoh 1: Aturan Operator 911: Jangan Kirim Polisi</th>
+   395→    <th width="50%" align="center">Contoh 2: Bagaimana Jika Kamu Bisa Melihat Kematian Mendekat?</th>
+   396→  </tr>
+   397→  <tr>
+   398→    <td width="50%" align="center"><a href="assets/readme/b4-dispatch.mp4"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@eb24085d20aea0efe37c0862cfcd0516b57dadf7/assets/readme/previews/b4-dispatch.gif" alt="B4: operator 911 bersarung tangan putih, panggilan malam dan ancaman di luar jendela" width="360"></a></td>
+   399→    <td width="50%" align="center"><a href="assets/readme/b4-death-clock.mp4"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@eb24085d20aea0efe37c0862cfcd0516b57dadf7/assets/readme/previews/b4-death-clock.gif" alt="B4: jam kematian, teks bertahap, ekspresi ketakutan dan ancaman muncul" width="360"></a></td>
+   400→  </tr>
+   401→  <tr>
+   402→    <td align="center">Narasi Brian · Efek selaras cerita · Pilihan akhir penuh ketegangan</td>
+   403→    <td align="center">Narasi Brian · Pembuka visual mencekam · Animasi teks yang menonjolkan inti</td>
+   404→  </tr>
+   405→</table>
+   406→
+   407→<!-- b4:section:end -->
+   408→
+   409→
+   410→---
+   411→
+   412→<!-- thumbnail-publishing-kit:start -->
+   413→<a id="thumbnail-publishing-kit"></a>
+   414→
+   415→## 🖼️ Kit Thumbnail CTR Tinggi & Publikasi
+   416→
+   417→**Video yang bagus tetap harus menarik klik terlebih dahulu.** Setelah animasi selesai, siapkan thumbnail yang sesuai, judul berpotensi CTR tinggi, dan pemantik interaksi penonton dalam alur kerja yang sama.
+   418→
+   419→Paket penyelesaian terpadu untuk **Director Mode dan Autopilot Mode**: menghasilkan daya tarik visual yang sesuai dengan karakter dan gaya video yang sudah disetujui, lengkap dengan metadata YouTube siap tayang.
+   420→
+   421→<table width="100%">
+   422→  <tr>
+   423→    <td align="center"><a href="assets/readme/thumbnails/no-camera.jpg"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@ae1685ba812f9686463f319fe6f0d4eb7d581433/assets/readme/thumbnails/no-camera.jpg" alt="NO CAMERA? — stickman sketsa tangan ekspresif dan kamera yang dicoret" width="280"></a></td>
+   424→    <td align="center"><a href="assets/readme/thumbnails/first-job.jpg"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@ae1685ba812f9686463f319fe6f0d4eb7d581433/assets/readme/thumbnails/first-job.jpg" alt="THE FIRST JOB — karakter prasejarah menghadapi rintangan batu raksasa" width="280"></a></td>
+   425→    <td align="center"><a href="assets/readme/thumbnails/a5-samurai-taxes.jpg"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@ae1685ba812f9686463f319fe6f0d4eb7d581433/assets/readme/thumbnails/a5-samurai-taxes.jpg" alt="SAMURAI VS TAXES — samurai cel shading, jalanan Edo, dan huruf serif terinspirasi cetak cukil kayu" width="280"></a></td>
+   426→  </tr>
+   427→  <tr>
+   428→    <td align="center">Satu pertanyaan sederhana dan satu simbol yang jelas.</td>
+   429→    <td align="center">Awal cerita dengan rintangan yang sangat besar.</td>
+   430→    <td align="center">Kostum zaman, latar, dan tipografi judul yang selaras.</td>
+   431→  </tr>
+   432→</table>
+   433→
+   434→<table width="100%">
+   435→  <tr>
+   436→    <td align="center"><a href="assets/readme/thumbnails/a1-you-vs-you.jpg"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@ae1685ba812f9686463f319fe6f0d4eb7d581433/assets/readme/thumbnails/a1-you-vs-you.jpg" alt="YOU vs YOU — stickman hitam kecil berhadapan dengan versi dirinya yang raksasa, dengan aksen merah sederhana" width="280"></a></td>
+   437→    <td align="center"><a href="assets/readme/thumbnails/a2-busy-vs-better.jpg"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@ae1685ba812f9686463f319fe6f0d4eb7d581433/assets/readme/thumbnails/a2-busy-vs-better.jpg" alt="BUSY ≠ BETTER — karakter bertopi merah tertimbun kartu pekerjaan dibandingkan dengan satu tugas yang jelas" width="280"></a></td>
+   438→    <td align="center"><a href="assets/readme/thumbnails/a4-3am-again.jpg"><img src="https://cdn.jsdelivr.net/gh/kaomei/stickman-video-director@ae1685ba812f9686463f319fe6f0d4eb7d581433/assets/readme/thumbnails/a4-3am-again.jpg" alt="3AM. AGAIN. — menggulir ponsel larut malam, cahaya layar biru, dan tulisan tangan lembut" width="280"></a></td>
+   439→  </tr>
+   440→  <tr>
+   441→    <td align="center">Satu konflik melalui perbedaan skala ekstrem.</td>
+   442→    <td align="center">Sibuk atau efektif, langsung terlihat.</td>
+   443→    <td align="center">Adegan yang akrab, cahaya lukis, dan tulisan tangan.</td>
+   444→  </tr>
+   445→</table>
+   446→
+   447→*Semua konsep thumbnail dirancang dengan psikologi pengemasan YouTube yang telah teruji: kontradiksi visual yang kuat, siluet bersih, dan tipografi yang terbaca di ponsel.*
+   448→
+   449→### Isi kit:
+   450→
+   451→- **Gambar Thumbnail**: Satu sampul lanskap 16:9 yang sesuai dengan karakter, gaya, palet, dan konflik yang telah disetujui. Dibuat langsung jika alat gambar yang sesuai tersedia dan biaya yang diperlukan telah disetujui.
+   452→- **5 Variasi Judul Berpotensi CTR Tinggi**: Dirancang untuk maksud pencarian, celah rasa penasaran, dan daya tarik penonton yang luas.
+   453→- **Deskripsi YouTube Studio & SEO**: Ringkasan topik, tag relevan, serta penanda waktu berdasarkan hasil edit akhir atau lini masa yang terverifikasi.
+   454→- **Pemantik Komentar Tersemat**: Satu pertanyaan relevan yang mengundang diskusi tulus.
+   455→- **Checklist Sebelum Publikasi**: Area aman di ponsel, kontras, akurasi konten, dan status pemeriksaan hak materi. Kelulusan Content-ID dan kelayakan monetisasi tidak dijamin.
+   456→
+   457→### Cara memicunya:
+   458→
+   459→Setelah Anda menyetujui video akhir, asisten akan menawarkan paket penutup opsional ini. Setujui untuk melanjutkan atau lewati tanpa menunda penyerahan video. Tidak perlu menyalin prompt. Anda juga bisa meminta langsung:
+   460→
+   461→```text
+   462→Buat Kit Thumbnail & Publikasi untuk video ini:
+   463→- 1 gambar thumbnail lanskap 16:9 yang sesuai dengan gaya yang disetujui
+   464→- 5 opsi judul YouTube
+   465→- Deskripsi, tag relevan, dan penanda waktu terverifikasi jika tersedia
+   466→- 1 pertanyaan interaksi untuk komentar tersemat
+   467→- Checklist sebelum publikasi dengan pemeriksaan tertunda yang ditandai jelas
+   468→```
+   469→
+   470→*Pembuatan gambar memerlukan alat yang tersedia dan persetujuan biaya bila diperlukan. Jika tidak tersedia, asisten menjelaskan kendalanya dan tetap menyerahkan paket teks. Permintaan lebih awal berdasarkan naskah yang disetujui menghasilkan draf; pemeriksaan hasil edit akhir tetap tertunda. Unduh sampul dan salin teks ke YouTube Studio atau TikTok sesuai kebutuhan. Tidak ada unggahan atau publikasi otomatis.*
+   471→
+   472→<!-- thumbnail-publishing-kit:end -->
+   473→
+   474→<!-- readme:reliability -->
+   475→
+   476→<a id="faq"></a>
+   477→
+   478→## ❓ Tanya jawab
+   479→
+   480→### Q1. Apakah ini benar-benar 100% gratis? Ada biaya tersembunyi?
+   481→
+   482→Ya. Stickman Video Director 100% gratis dan open source dengan lisensi MIT. Anda bebas menggunakannya untuk proyek pribadi maupun komersial. Berbeda dari platform SaaS tertutup yang mengenakan US$30–60/bulan, proyek ini tidak memiliki biaya langganan. Anda hanya membayar penggunaan API pihak ketiga sendiri, seperti Google Gemini, Claude, atau ElevenLabs, sesuai model yang Anda hubungkan.
+   483→
+   484→<!-- readme:platforms -->
+   485→
+   486→### Q2. Bagaimana saya menjaga konsistensi karakter?
+   487→
+   488→**B · Mode Autopilot**: Menggunakan alur produksi berbasis kode. Aset gambar karakter dibuat sebelum produksi video dan dipakai ulang di berbagai adegan, sehingga penampilan karakter relatif konsisten.
+   489→
+   490→**A · Mode Sutradara**: Terutama mengandalkan pembuatan video dari teks. Jika gaya rambut, pakaian, atau ciri karakter lainnya rumit dan sulit direproduksi secara konsisten hanya dengan teks, tambahkan satu gambar referensi karakter stickman dan terus gunakan pada klip berikutnya agar hasilnya lebih stabil.
+   491→
+   492→### Q3. Alat apa yang sebaiknya saya gunakan? Apakah perlu memilih model pembuat gambar tertentu?
+   493→
+   494→**Agar hasilnya sedekat mungkin dengan contoh, saya merekomendasikan Codex.** Video contoh Mode B saya buat dan uji di Codex; Anda tidak perlu menulis kode sendiri. Skill juga dapat dipasang di agent lain, tetapi perbedaan model, konfigurasi alat, dan cara eksekusi dapat memengaruhi hasilnya.
+   495→
+   496→Untuk gambar, saya memakai model bawaan GPT tanpa menyiapkan API tambahan. Buat sampel pendek terlebih dahulu untuk memeriksa gaya dan hasilnya sebelum melanjutkan video lengkap.
+   497→
+   498→### Q4. Bisakah saya membuat video tanpa naskah yang sudah jadi?
+   499→
+   500→Ya. Anda bisa menempelkan ide kasar, pemikiran spontan, tautan berita, atau satu artikel blog lengkap. Sutradara AI akan mengambil konflik utama, menulis hook 3 detik yang menarik, lalu menyusun topik Anda menjadi alur cerita padat berisi 6 adegan dengan timing komedi dan arahan narasi.
+   501→
+   502→### Q5. Bagaimana AI menjaga retensi penonton dan membuat video tidak membosankan?
+   503→
+   504→Alat AI tradisional hanya mengubah teks menjadi ilustrasi harfiah. Stickman Video Director menerapkan **psikologi storytelling visual** yang nyata:
+   505→
+   506→- **Hook 3 Detik**: mengubah kalimat pembuka menjadi kontradiksi visual langsung atau celah rasa ingin tahu agar penonton tidak melewatkan video.
+   507→- **Metafora Visual**: mengubah konsep abstrak yang membosankan menjadi lelucon visual, misalnya kecemasan sebagai roda hamster yang menyusut atau burnout sebagai indikator baterai 1%.
+   508→- **Ritme dan Jeda Komedi**: memasukkan jeda terstruktur, shot reaksi, dan petunjuk efek suara (SFX) untuk meniru timing komedi kreator seperti Casually Explained.
+   509→
+   510→### Q6. Bisakah video ini dimonetisasi di YouTube dan TikTok?
+   511→
+   512→Ya, tentu saja. Salah satu kekhawatiran utama kreator tanpa wajah adalah kebijakan demonetisasi YouTube untuk “Reused Content” atau konten AI minim usaha. Karena Stickman Video Director menulis alur cerita khusus, ritme narasi unik, dan penataan visual orisinal, hasil Anda sepenuhnya orisinal. Ratusan channel berhasil memonetisasi video naratif stickman melalui YouTube Partner Program (YPP).
+   513→
+   514→### Q7. Apakah saya perlu bisa coding atau memiliki GPU mahal?
+   515→
+   516→Tidak. Anda tidak memerlukan kartu grafis RTX kelas atas atau pengetahuan pemrograman.
+   517→
+   518→- **Director Mode** digunakan lewat percakapan di asisten AI apa pun yang mendukung Skill.
+   519→- **Autopilot Mode** berjalan di agen coding AI seperti Claude Code, Codex, atau Cursor, menggunakan permintaan sederhana dalam bahasa Inggris. Seluruh proses pembuatan visual yang berat ditangani oleh API cloud ringan atau rendering prosedural, bukan perangkat keras lokal Anda.
+   520→
+   521→<!-- readme:contribute -->
+   522→
+   523→<a id="road-to-10000-stars--creator-ecosystem"></a>
+   524→
+   525→## ⭐ Menuju 10,000 Stars dan ekosistem kreator
+   526→
+   527→**Setiap Star mendukung rilisan berikutnya!** Bersama-sama, kita membangun studio 100% gratis dan open source untuk membantu kreator solo mengelola channel tanpa tampil di kamera, tanpa langganan SaaS seharga US$ 50/bulan.
+   528→
+   529→- [x] **1,000 Stars**: Director Mode + 5 gaya visual inti telah dirilis
+   530→- [x] **3,000 Stars**: AutoPilot Mode untuk membuat video dalam satu klik telah dirilis
+   531→- [ ] **🔥 5,000 Stars**:
+   532→  - Rilis 5–10 gaya visual baru
+   533→  - Editor massal satu klik untuk YouTube Shorts dan TikTok
+   534→- [ ] **7,500 Stars**:
+   535→  - Koleksi 1,000+ prompt naskah YouTube viral
+   536→  - 200+ efek suara dan transisi bebas royalti serta aman dari Content ID
+   537→- [ ] **10,000 Stars**: peluncuran Web Studio resmi serba lengkap
+   538→
+   539→<div align="center">
+   540→<a href="https://www.star-history.com/?repos=kaomei%2Fstickman-video-director&amp;type=date">
+   541→  <picture>
+   542→    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=kaomei/stickman-video-director&amp;type=Date&amp;theme=dark">
+   543→    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=kaomei/stickman-video-director&amp;type=Date">
+   544→    <img src="https://api.star-history.com/svg?repos=kaomei/stickman-video-director&amp;type=Date" alt="Riwayat Star GitHub untuk kaomei/stickman-video-director" width="800">
+   545→  </picture>
+   546→</a>
+   547→</div>
+   548→
+   549→<a id="whats-next"></a>
+   550→
+   551→## 🔮 Gaya visual yang direncanakan
+   552→
+   553→Kami sedang melatih mesin khusus baru untuk niche YouTube tanpa tampil di kamera yang paling banyak diminta:
+   554→
+   555→- **Sejarah dan legenda ala OverSimplified** — Tokoh sejarah mungil, panah penaklukan, dan peta pertempuran satiris
+   556→- **Pertarungan stickman dan garis kecepatan** — Pertarungan dinamis ala Alan Becker, bela diri, dan frame benturan
+   557→- **Psikologi gelap dan noir stoik** — Siluet penuh suasana, mata bercahaya, dan cerita ala The 48 Laws of Power
+   558→- **Parodi Wall Street dan Silicon Valley** — Stickman berjas dan berdasi, grafik anjlok, dan sindiran korporat
+   559→- **Podcast dua mikrofon dan stand-up** — Komedi dialog cepat, pengolahan ulang wawancara, dan saling ledek antarkarakter
+   560→- **Misteri internet dan legenda urban** — Sketsa pensil menyeramkan, gangguan analog, dan kisah misteri Reddit
+   561→
+   562→## 💬 Komunitas dan kiriman karya
+   563→
+   564→Ingin mengusulkan gaya atau menampilkan channel Anda? Kirim pesan ke **[@CrazyKaomei](https://telegram.me/CrazyKaomei)** di Telegram:
+   565→
+   566→- **Minta gaya**: kirim tautan referensi visual + niche yang ingin Anda bahas.
+   567→- **Tampilkan karya**: sudah membuat video dengan alat ini? Kirim tautannya untuk ditampilkan di README ini dan channel YouTube resmi kami!
+   568→
+   569→🔔 *Ikuti **[@CrazyKaomei](https://x.com/CrazyKaomei)** di X untuk alur produksi video harian, alat otomatisasi, dan SOP pertumbuhan channel.*
+   570→
+   571→## 📄 Lisensi
+   572→
+   573→Proyek ini dirilis dengan [lisensi MIT](https://github.com/kaomei/stickman-video-director/blob/main/LICENSE). Anda boleh menggunakan, mengubah, mendistribusikan, dan memakainya secara komersial tanpa membayar Skill ini. Sertakan pemberitahuan hak cipta dan lisensi saat mendistribusikan proyek atau bagian pentingnya.
+   574→
+   575→Disediakan “apa adanya”, tanpa jaminan. Lihat ketentuan lengkap di [LICENSE](https://github.com/kaomei/stickman-video-director/blob/main/LICENSE).
+   576→
