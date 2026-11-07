@@ -14,10 +14,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Z.ai Code Scaffold - AI-Powered Development",
-  description: "Modern Next.js scaffold optimized for AI-powered development with Z.ai. Built with TypeScript, Tailwind CSS, and shadcn/ui.",
-  keywords: ["Z.ai", "Next.js", "TypeScript", "Tailwind CSS", "shadcn/ui", "AI development", "React"],
-  authors: [{ name: "Z.ai Team" }],
+  title: "Stickman Video Director — Preview Interaktif",
+  description: "Dashboard preview untuk skill Stickman Video Director: katalog 10 gaya, demo Studio Director (proposal sutradara AI), dan status runtime Autopilot.",
+  keywords: ["stickman", "video director", "AI video", "storyboard", "animasi stickman", "open source"],
+  authors: [{ name: "kaomei (stickman-video-director)" }],
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
