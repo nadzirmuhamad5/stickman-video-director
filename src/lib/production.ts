@@ -65,6 +65,8 @@ export type ProductionJob = {
   createdAt: string;
   narrationLang: "id" | "en";
   voice: string;
+  /** "edge" (Microsoft neural) | "zai" (SDK bawaan); job lama tidak punya field ini */
+  ttsEngine?: "edge" | "zai";
   proposal: Proposal;
 };
 

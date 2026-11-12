@@ -9,6 +9,7 @@ import {
   type Proposal,
   type ProductionJob,
 } from "@/lib/production";
+import { DEFAULT_VOICE, findVoice } from "@/lib/tts-voices";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,8 +30,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Maksimal 12 klip per produksi." }, { status: 400 });
   }
   const narrationLang = body.narrationLang === "en" ? "en" : "id";
-  const ALLOWED_VOICES = ["tongtong", "chuichui", "xiaochen", "jam", "kazi", "douji", "luodo"];
-  const voice = ALLOWED_VOICES.includes(String(body.voice)) ? String(body.voice) : "tongtong";
+  const requested = String(body.voice ?? "");
+  const voice = findVoice(requested) ? requested : DEFAULT_VOICE;
+  const ttsEngine = findVoice(voice)!.engine;
 
   const id = randomUUID();
   const dir = jobDir(id);
@@ -42,6 +44,7 @@ export async function POST(request: NextRequest) {
     createdAt: new Date().toISOString(),
     narrationLang,
     voice,
+    ttsEngine,
     proposal,
   };
   fs.writeFileSync(path.join(dir, "job.json"), JSON.stringify(job));

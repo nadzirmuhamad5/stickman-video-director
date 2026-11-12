@@ -12,6 +12,7 @@ type StatusPayload = {
   skillInstalled: boolean;
   skillPath: string;
   doctor: DoctorCheck[];
+  edgeTts: { ok: boolean; detail: string };
   geminiKeyPresent: boolean;
   networkChecked: boolean;
   note: string;
@@ -38,6 +39,26 @@ function runDoctor(): Promise<{ stdout: string; stderr: string; code: number }> 
       }
     );
   });
+}
+
+function checkEdgeTts(): Promise<{ ok: boolean; detail: string }> {
+  const candidates = [process.env.EDGE_TTS_PYTHON, "/home/z/.venv/bin/python3", "python3"].filter(
+    (p): p is string => Boolean(p)
+  );
+  const probe = (bin: string) =>
+    new Promise<boolean>((resolve) => {
+      execFile(bin, ["-c", "import edge_tts"], { timeout: 15_000, encoding: "utf8" }, (error) =>
+        resolve(!error)
+      );
+    });
+  return (async () => {
+    for (const bin of candidates) {
+      if (await probe(bin)) {
+        return { ok: true, detail: "Siap (suara Ardi / Gadis & English)" };
+      }
+    }
+    return { ok: false, detail: "Paket python edge-tts tidak terpasang" };
+  })();
 }
 
 export async function GET() {
@@ -72,10 +93,13 @@ export async function GET() {
     detail: checks[key] === true ? "Siap" : "Tidak tersedia",
   }));
 
+  const edgeTts = await checkEdgeTts();
+
   const payload: StatusPayload = {
     skillInstalled: doctor.length > 0 && doctor.every((c) => c.ok),
     skillPath: "skills/directing-stickman-videos",
     doctor,
+    edgeTts,
     geminiKeyPresent: parsed.gemini_key_present === true,
     networkChecked: parsed.network_checked === true,
     note:

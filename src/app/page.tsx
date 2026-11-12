@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -34,6 +34,14 @@ import {
   Languages,
 } from "lucide-react";
 import { STYLES, SELECTABLE_STYLES, DURATIONS, type StickmanStyle } from "@/lib/stickman-styles";
+import { TTS_VOICES, DEFAULT_VOICE } from "@/lib/tts-voices";
+
+const EDGE_VOICES = TTS_VOICES.filter((v) => v.engine === "edge");
+const ZAI_VOICES = TTS_VOICES.filter((v) => v.engine === "zai");
+const firstVoiceFor = (lang: "id" | "en") =>
+  TTS_VOICES.find((v) => v.lang === lang && v.engine === "edge")?.id ??
+  TTS_VOICES.find((v) => v.lang === lang)?.id ??
+  DEFAULT_VOICE;
 
 type ProposalClip = {
   index: number;
@@ -77,6 +85,7 @@ type StatusPayload = {
   skillInstalled: boolean;
   skillPath: string;
   doctor: { label: string; ok: boolean; detail: string }[];
+  edgeTts?: { ok: boolean; detail: string };
   geminiKeyPresent: boolean;
   networkChecked: boolean;
   note: string;
@@ -97,7 +106,9 @@ export default function Home() {
   // Production (Tahap B) state
   const [jobId, setJobId] = useState<string | null>(null);
   const [narrationLang, setNarrationLang] = useState<"id" | "en">("id");
-  const [voice, setVoice] = useState("tongtong");
+  const [voice, setVoice] = useState(DEFAULT_VOICE);
+  const [previewing, setPreviewing] = useState(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const [prodPhase, setProdPhase] = useState<"idle" | "assets" | "render" | "done" | "error">("idle");
   const [prodMessage, setProdMessage] = useState("");
   const [prodError, setProdError] = useState<string | null>(null);
@@ -115,6 +126,54 @@ export default function Home() {
     if (!style.selectable) return;
     setSelectedStyle(style.code);
     studioRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function changeNarrationLang(lang: "id" | "en") {
+    setNarrationLang(lang);
+    const current = TTS_VOICES.find((v) => v.id === voice);
+    if (!current || current.lang !== lang) setVoice(firstVoiceFor(lang));
+  }
+
+  function stopPreview() {
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current = null;
+    }
+    setPreviewing(false);
+  }
+
+  async function previewVoice() {
+    if (previewing) {
+      stopPreview();
+      return;
+    }
+    setPreviewing(true);
+    try {
+      const res = await fetch("/api/tts/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voiceId: voice, lang: narrationLang }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? "Gagal memuat contoh suara.");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      previewAudioRef.current = audio;
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        if (previewAudioRef.current === audio) {
+          previewAudioRef.current = null;
+          setPreviewing(false);
+        }
+      };
+      await audio.play();
+    } catch (err) {
+      setPreviewing(false);
+      setProdError(err instanceof Error ? err.message : "Gagal memutar contoh suara.");
+    }
   }
 
   async function generateProposal() {
@@ -715,7 +774,7 @@ export default function Home() {
                               <Label className="flex items-center gap-1.5">
                                 <Languages className="h-3.5 w-3.5 text-amber-500" /> Bahasa narasi
                               </Label>
-                              <Select value={narrationLang} onValueChange={(v) => setNarrationLang(v as "id" | "en")}>
+                              <Select value={narrationLang} onValueChange={(v) => changeNarrationLang(v as "id" | "en")}>
                                 <SelectTrigger className="w-full">
                                   <SelectValue />
                                 </SelectTrigger>
@@ -726,21 +785,50 @@ export default function Home() {
                               </Select>
                             </div>
                             <div className="space-y-2">
-                              <Label className="flex items-center gap-1.5">
-                                <Volume2 className="h-3.5 w-3.5 text-amber-500" /> Suara narator
-                              </Label>
+                              <div className="flex items-center justify-between gap-2">
+                                <Label className="flex items-center gap-1.5">
+                                  <Volume2 className="h-3.5 w-3.5 text-amber-500" /> Suara narator
+                                </Label>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={previewVoice}
+                                  className="h-7 px-2 text-[11px]"
+                                  disabled={prodPhase !== "idle"}
+                                >
+                                  {previewing ? (
+                                    <>
+                                      <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Berhenti
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Play className="mr-1 h-3 w-3" /> Dengar contoh
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
                               <Select value={voice} onValueChange={setVoice}>
                                 <SelectTrigger className="w-full">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="tongtong">Tongtong — hangat &amp; ramah</SelectItem>
-                                  <SelectItem value="chuichui">Chuichui — ceria</SelectItem>
-                                  <SelectItem value="xiaochen">Xiaochen — kalem profesional</SelectItem>
-                                  <SelectItem value="jam">Jam — British</SelectItem>
-                                  <SelectItem value="kazi">Kazi — jelas &amp; standar</SelectItem>
-                                  <SelectItem value="douji">Douji — natural</SelectItem>
-                                  <SelectItem value="luodo">Luodo — ekspresif</SelectItem>
+                                  <SelectGroup>
+                                    <SelectLabel className="text-amber-500">Edge Neural · kualitas terbaik</SelectLabel>
+                                    {EDGE_VOICES.map((v) => (
+                                      <SelectItem key={v.id} value={v.id}>
+                                        {v.label} · {v.gender} — {v.description}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectGroup>
+                                  <SelectGroup>
+                                    <SelectLabel className="text-muted-foreground">ZAI bawaan · cadangan</SelectLabel>
+                                    {ZAI_VOICES.map((v) => (
+                                      <SelectItem key={v.id} value={v.id}>
+                                        {v.label} — {v.description}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectGroup>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -752,8 +840,8 @@ export default function Home() {
                             <Video className="mr-2 h-4 w-4" /> Setuju &amp; Produksi Video ({proposal.clips.length} klip)
                           </Button>
                           <p className="text-center text-[11px] text-muted-foreground">
-                            Ilustrasi AI per klip + narasi TTS + render MP4 di server ini. Perkiraan ±1–3 menit —
-                            biarkan tab tetap terbuka.
+                            Ilustrasi AI per klip + narasi suara Edge Neural + render MP4 di server ini. Perkiraan
+                            ±1–3 menit — biarkan tab tetap terbuka.
                           </p>
                         </>
                       )}
@@ -898,6 +986,22 @@ export default function Home() {
                       </Badge>
                     </div>
                   ))}
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-background px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      {status.edgeTts?.ok ? (
+                        <CircleCheck className="h-5 w-5 shrink-0 text-green-500" />
+                      ) : (
+                        <CircleAlert className="h-5 w-5 shrink-0 text-amber-500" />
+                      )}
+                      <span className="text-sm font-medium">TTS narasi — Microsoft Edge Neural</span>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={status.edgeTts?.ok ? "border-green-500/40 text-green-500" : "border-amber-500/40 text-amber-500"}
+                    >
+                      {status.edgeTts?.detail ?? "Memeriksa…"}
+                    </Badge>
+                  </div>
                   <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-background px-4 py-3">
                     <div className="flex items-center gap-3">
                       {status.geminiKeyPresent ? (

@@ -11,6 +11,8 @@ import {
   sleep,
   writeProgress,
 } from "@/lib/production";
+import { synthesizeTTS } from "@/lib/tts";
+import { resolveVoice } from "@/lib/tts-voices";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -76,32 +78,23 @@ export async function POST(request: NextRequest) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 1000);
+  const voice = resolveVoice(job.voice);
+  const engineLabel = voice.engine === "edge" ? "Edge Neural" : "ZAI";
   let audioError = "Unknown TTS error";
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const zai = await ZAI.create();
-      const response = await zai.audio.tts.create({
-        input: narration,
-        voice: job.voice,
-        speed: 1.0,
-        response_format: "wav",
-        stream: false,
-      });
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = Buffer.from(new Uint8Array(arrayBuffer));
-      if (buffer.length < 2000) throw new Error("Audio TTS terlalu pendek / kosong");
-      fs.writeFileSync(audioPath, buffer);
+      await synthesizeTTS({ text: narration, voiceId: job.voice, outPath: audioPath });
       progress.audio = true;
       break;
     } catch (err) {
       audioError = err instanceof Error ? err.message : String(err);
-      console.error(`[production/clip] tts attempt ${attempt}/3 failed: ${audioError}`);
+      console.error(`[production/clip] tts(${voice.engine}) attempt ${attempt}/3 failed: ${audioError}`);
       await sleep(900 * attempt);
     }
   }
   if (!progress.audio) {
     return NextResponse.json(
-      { error: `Gagal membuat narasi klip ${index}: ${audioError}` },
+      { error: `Gagal membuat narasi klip ${index} (${engineLabel}): ${audioError}` },
       { status: 502 }
     );
   }
