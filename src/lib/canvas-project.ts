@@ -87,17 +87,19 @@ export function chunkSingleLine(text: string, maxChars: number): string[] {
       chunks.push(buffer.join(" "));
       buffer = [w];
     } else {
-      buffer = [w];
+      buffer.push(w);
     }
   }
   if (buffer.length) chunks.push(buffer.join(" "));
   // Pecahan terakhir yang terlalu pendek digabung ke chunk sebelumnya agar
-  // caption tidak menampilkan satu-dua kata sendirian (asal tetap muat
-  // satu baris caption).
+  // caption tidak menampilkan satu-dua kata sendirian. Batas gabungan harus
+  // tetap muat SATU baris caption renderer (maks ~1120px: B1 34px ≈ 17.1px/
+  // karakter → ≤58 karakter; B2 40px ≈ 20.1px/karakter → ≤50 karakter).
   if (chunks.length >= 2 && chunks[chunks.length - 1].length < 9) {
     const last = chunks.pop()!;
     const merged = `${chunks[chunks.length - 1]} ${last}`;
-    if (merged.length <= 56) chunks[chunks.length - 1] = merged;
+    const cap = Math.min(50, maxChars + 8);
+    if (merged.length <= cap) chunks[chunks.length - 1] = merged;
     else chunks.push(last);
   }
   return chunks;
@@ -105,7 +107,10 @@ export function chunkSingleLine(text: string, maxChars: number): string[] {
 
 /**
  * Sequential non-overlapping single-line cues between startT and endT,
- * weighted by chunk length. Enforces the renderer's caption rules.
+ * weighted by chunk length. Semua chunk SELALU tampil: bila jendela terlalu
+ * pendek untuk durasi natural, semua durasi dikompres proporsional (bukan
+ * dipotong) sehingga tidak ada caption yang hilang. Enforces the renderer's
+ * caption rules.
  */
 export function buildSingleLineCues(text: string, startT: number, endT: number, maxChars: number): CanvasCue[] {
   const chunks = chunkSingleLine(text, maxChars);
@@ -113,19 +118,23 @@ export function buildSingleLineCues(text: string, startT: number, endT: number, 
   const usable = Math.max(0.8, endT - startT - 0.25);
   const weights = chunks.map((c) => Math.max(4, c.length));
   const sum = weights.reduce((a, b) => a + b, 0);
+  const naturals = chunks.map((_, i) => Math.max(0.7, (weights[i] / sum) * usable));
+  const totalNatural = naturals.reduce((a, b) => a + b, 0);
+  const scale = totalNatural > usable ? usable / totalNatural : 1;
   const cues: CanvasCue[] = [];
-  let t = startT;
-  let prevEnd = startT;
   for (let i = 0; i < chunks.length; i++) {
-    const dur = Math.max(0.8, (weights[i] / sum) * usable);
-    let start = Math.max(t, prevEnd);
+    const dur = Math.max(0.45, naturals[i] * scale);
+    const start = i === 0 ? startT : cues[i - 1].end;
     let end = Math.min(start + dur, endT);
-    if (end - start < 0.3) break;
-    cues.push({ text: chunks[i], start, end });
-    prevEnd = end;
-    t = start + dur;
+    if (end - start < 0.35) end = Math.min(endT, start + 0.35);
+    if (end <= start) break;
+    cues.push({ text: chunks[i], start: round3(start), end: round3(end) });
   }
   return cues;
+}
+
+function round3(x: number): number {
+  return Number(x.toFixed(3));
 }
 
 /**
@@ -295,7 +304,10 @@ export function buildClipCanvasProject(input: ClipCanvasInput): {
     });
   }
 
-  const maxChars = input.ratio === "9:16" ? 34 : 48;
+  // Caption harus muat satu baris: B1 34px ≈ 58 karakter, B2 40px ≈ 50
+  // karakter pada lebar caption 1120px (diukur dengan NotoSans asli).
+  const maxChars =
+    input.ratio === "9:16" ? (style === "B1" ? 44 : 36) : style === "B1" ? 52 : 44;
   const cues = buildSingleLineCues(input.narration, lead, input.audioDuration + lead, maxChars);
 
   const project: CanvasProject = {
@@ -318,12 +330,20 @@ export function buildClipCanvasProject(input: ClipCanvasInput): {
 
 // ------------------------------------------------- Mode B: autopilot video ----
 
+export type AutopilotBeat = {
+  label: string; // frasa pendek dari/ikut narasi scene
+  pose: 0 | 1 | 2; // B1 pose atlas index
+  asset: string; // "@b1/<file>.png" or "none"
+  accent: "underline" | "arrow" | "none";
+};
+
 export type AutopilotScene = {
   narration: string;
   keyword: string;
   asset: string; // "@b1/<file>.png" or "none"
   pose: number; // 0 | 1 | 2 (B1 pose atlas)
   overlay: "underline" | "arrow" | "none";
+  beats: AutopilotBeat[];
 };
 
 export type AutopilotCanvasInput = {
@@ -335,13 +355,145 @@ export type AutopilotCanvasInput = {
   scenes: AutopilotScene[];
 };
 
-const POSE_BOB_Y = [0, 16, 0, 16, 0, 16, 0, 16];
-const POSE_BOB_T = [0.5, 1.3, 2.1, 2.9, 3.7, 4.5, 5.3, 6.1];
+type Keys = NonNullable<Layer["keys"]>;
+
+const STICKMAN_X_916 = 110;
+const STICKMAN_X_169 = 98;
+
+function round2(x: number): number {
+  return Number(x.toFixed(2));
+}
+
+type BeatWin = {
+  relStart: number;
+  relEnd: number;
+  beat: AutopilotBeat;
+  isLast: boolean;
+};
+
+/** Split the scene span into beat windows weighted by label length. */
+function planBeats(beats: AutopilotBeat[], span: number): BeatWin[] {
+  const maxBeats = Math.max(1, Math.floor(span / 1.3));
+  const list = beats.length <= maxBeats ? beats : beats.slice(0, maxBeats);
+  const weights = list.map((b) => Math.max(6, b.label.length));
+  const sum = weights.reduce((a, b) => a + b, 0);
+  const wins: BeatWin[] = [];
+  let acc = 0;
+  for (let i = 0; i < list.length; i++) {
+    const relStart = acc;
+    acc += (weights[i] / sum) * span;
+    wins.push({
+      relStart: round3(relStart),
+      relEnd: round3(i === list.length - 1 ? span : acc),
+      beat: list[i],
+      isLast: i === list.length - 1,
+    });
+  }
+  return wins;
+}
+
+function fadeFor(relStart: number, relEnd: number, isLast: boolean): { inD: number; outD: number } {
+  const win = relEnd - relStart;
+  return {
+    inD: Math.min(0.3, Math.max(0.12, win * 0.3)),
+    outD: isLast ? 0 : Math.min(0.35, Math.max(0.14, win * 0.3)),
+  };
+}
 
 /**
- * Build + write the full autopilot project (one shot per scene). Voice wav is
- * expected at canvas/voice.wav inside the job dir. Returns { projectPath,
- * duration, cues }.
+ * Stickman per beat: crossfade masuk/keluar + bobbing & sway sepanjang
+ * jendela beat (bukan cuma 6 detik pertama), sehingga gerakan terus hidup.
+ */
+function stickKeys(
+  relStart: number,
+  relEnd: number,
+  baseY: number,
+  baseX: number,
+  fade: { inD: number; outD: number },
+  span: number
+): Keys {
+  const keys: Keys = [];
+  keys.push({ t: round3(relStart), alpha: 0, y: baseY + 12, x: baseX });
+  keys.push({ t: round3(relStart + fade.inD), alpha: 1, y: baseY, x: baseX });
+  const endT = Math.min(relEnd, span - 0.06);
+  const period = 0.8;
+  let t = relStart + fade.inD + period;
+  let i = 0;
+  while (t < endT - (fade.outD > 0 ? fade.outD : 0) - 0.08) {
+    keys.push({
+      t: round3(t),
+      y: baseY + (i % 2 === 0 ? -18 : 0),
+      x: baseX + (i % 2 === 1 ? 12 : -12),
+    });
+    t += period;
+    i++;
+  }
+  if (fade.outD > 0) {
+    keys.push({ t: round3(relEnd - fade.outD), alpha: 1 });
+    keys.push({
+      t: round3(Math.max(relEnd - 0.06, relEnd - fade.outD + 0.05)),
+      alpha: 0,
+      y: baseY + 12,
+      x: baseX,
+    });
+  } else if (t - period < endT) {
+    keys.push({ t: round3(t - period + 0.4), y: baseY + (i % 2 === 0 ? -18 : 0), x: baseX });
+  }
+  return normalizeKeys(keys, span);
+}
+
+/** Kartu kata kunci: meluncur naik saat beat mulai, pudar sebelum beat berikut. */
+function cardKeys(relStart: number, relEnd: number, y: number, span: number, isLast: boolean): Keys {
+  const keys: Keys = [];
+  const win = relEnd - relStart;
+  const inD = Math.min(0.3, Math.max(0.12, win * 0.4));
+  keys.push({ t: round3(relStart + 0.1), alpha: 0, y: y + 26 });
+  keys.push({ t: round3(relStart + 0.1 + inD + 0.35), alpha: 1, y });
+  if (!isLast) {
+    const outD = fadeFor(relStart, relEnd, false).outD;
+    keys.push({ t: round3(relEnd - outD), alpha: 1 });
+    keys.push({ t: round3(Math.max(relEnd - 0.06, relEnd - outD + 0.05)), alpha: 0 });
+  }
+  return normalizeKeys(keys, span);
+}
+
+/** Garis/panah yang menggambar sendiri di awal beat, lalu pudar bersama kartu. */
+function strokeKeys(relStart: number, relEnd: number, delay: number, span: number, isLast: boolean): Keys {
+  const keys: Keys = [];
+  keys.push({ t: round3(relStart + delay), progress: 0 });
+  keys.push({ t: round3(Math.min(relStart + delay + 1.0, relEnd - 0.15)), progress: 1 });
+  if (!isLast) {
+    const outD = fadeFor(relStart, relEnd, false).outD;
+    keys.push({ t: round3(relEnd - outD), alpha: 1 });
+    keys.push({ t: round3(Math.max(relEnd - 0.06, relEnd - outD + 0.05)), alpha: 0 });
+  }
+  return normalizeKeys(keys, span);
+}
+
+/** Prop krayon: melayang masuk dengan ayunan lembut, terikat pada jendela beat. */
+function propKeys(relStart: number, relEnd: number, span: number, isLast: boolean): Keys {
+  const keys: Keys = [];
+  keys.push({ t: round3(relStart + 0.12), alpha: 0, angle: -0.07 });
+  keys.push({ t: round3(relStart + 0.5), alpha: 1, angle: 0.03 });
+  let t = relStart + 1.5;
+  let i = 0;
+  while (t < relEnd - 0.3) {
+    keys.push({ t: round3(t), angle: i % 2 === 0 ? -0.04 : 0.03 });
+    t += 1.1;
+    i++;
+  }
+  if (!isLast) {
+    const outD = fadeFor(relStart, relEnd, false).outD;
+    keys.push({ t: round3(relEnd - outD), alpha: 1 });
+    keys.push({ t: round3(Math.max(relEnd - 0.06, relEnd - outD + 0.05)), alpha: 0 });
+  }
+  return normalizeKeys(keys, span);
+}
+
+/**
+ * Build + write the full autopilot project (one shot per scene, 2-4 beats per
+ * scene). Tiap beat punya kartu kata kunci + pose stickman + prop + aksen
+ * yang muncul mengikuti urutan narasi — bukan visual statis satu scene.
  */
 export function buildAutopilotProject(input: AutopilotCanvasInput): {
   projectPath: string;
@@ -353,20 +505,34 @@ export function buildAutopilotProject(input: AutopilotCanvasInput): {
   const duration = input.voiceDuration + lead + tail;
   const plane = planeFor(input.ratio);
   const ink = input.styleB === "B2" ? INK_WARM : INK;
+  const is916 = input.ratio === "9:16";
 
-  // Scene spans proportional to narration length.
+  // Scene spans proportional to narration length. Semua batas langsung
+  // dibulatkan ke 3 desimal agar identik dengan shot.start/end yang dibaca
+  // validator renderer (span = round(end) - round(start)), sehingga key &
+  // layer from/to tidak pernah melampaui span.
   const weights = input.scenes.map((s) => Math.max(10, s.narration.length));
   const weightSum = weights.reduce((a, b) => a + b, 0);
   const usable = Math.max(1, duration - lead - tail);
   const starts: number[] = [];
   let acc = 0;
   for (let i = 0; i < input.scenes.length; i++) {
-    starts.push(acc);
+    starts.push(round3(acc));
     acc += (weights[i] / weightSum) * usable;
   }
   const ends: number[] = input.scenes.map((_, i) =>
-    i === input.scenes.length - 1 ? duration : starts[i + 1]
+    i === input.scenes.length - 1 ? round3(duration) : starts[i + 1]
   );
+
+  const stickBaseX = is916 ? STICKMAN_X_916 : STICKMAN_X_169;
+  const stickBaseY = plane.planeH * (is916 ? 0.36 : 0.3);
+  const stickW = is916 ? 380 : 300;
+  const propA = is916
+    ? { x: plane.planeW - 430, y: 120, w: 320 }
+    : { x: plane.planeW - 360, y: 64, w: 240 };
+  const propB = is916
+    ? { x: plane.planeW - 380, y: plane.planeH * 0.42, w: 270 }
+    : { x: plane.planeW - 330, y: plane.planeH * 0.42, w: 220 };
 
   const shots: Shot[] = [];
   const captions: CanvasCue[] = [];
@@ -385,15 +551,15 @@ export function buildAutopilotProject(input: AutopilotCanvasInput): {
         type: "text",
         text: input.title.slice(0, 80),
         x: 90,
-        y: plane.planeH * 0.1,
-        w: plane.planeW - 180,
-        size: 92,
+        y: is916 ? plane.planeH * 0.1 : 60,
+        w: is916 ? 720 : 780,
+        size: is916 ? 84 : 76,
         bold: true,
         color: ink,
         keys: normalizeKeys(
           [
-            { t: 0.2, alpha: 0 },
-            { t: 0.8, alpha: 1 },
+            { t: 0.2, alpha: 0, y: (is916 ? plane.planeH * 0.1 : 60) + 22 },
+            { t: 0.8, alpha: 1, y: is916 ? plane.planeH * 0.1 : 60 },
             { t: Math.min(2.8, span - 0.7), alpha: 1 },
             { t: Math.min(3.4, span - 0.15), alpha: 0 },
           ],
@@ -402,107 +568,109 @@ export function buildAutopilotProject(input: AutopilotCanvasInput): {
       });
     }
 
-    // Stickman pose with a gentle bobbing loop (B1 pose atlas).
-    if (input.styleB === "B1") {
-      const baseY = plane.planeH * 0.36;
-      layers.push({
-        type: "pose",
-        pose: Math.max(0, Math.min(2, Math.round(scene.pose))),
-        x: 110,
-        y: baseY,
-        w: 380,
-        keys: normalizeKeys(
-          [
-            { t: 0, alpha: 0 },
-            { t: 0.35, alpha: 1 },
-            ...POSE_BOB_T.map((bt, bi) => ({ t: bt, y: baseY + POSE_BOB_Y[bi] })),
-          ],
-          span
-        ),
-      });
-    }
+    // Beats: fallback satu beat dari scene bila model tidak memberi beats.
+    const beats: AutopilotBeat[] = scene.beats.length
+      ? scene.beats
+      : [
+          {
+            label: (scene.keyword || scene.narration.split(" ").slice(0, 3).join(" ")).slice(0, 34),
+            pose: (Math.max(0, Math.min(2, Math.round(scene.pose))) as 0 | 1 | 2),
+            asset: scene.asset,
+            accent: scene.overlay,
+          },
+        ];
 
-    // Bundled crayon prop, floating in with a slight swing.
-    if (scene.asset && scene.asset.startsWith("@b1/")) {
-      layers.push({
-        type: "image",
-        path: scene.asset,
-        x: plane.planeW - 430,
-        y: 120,
-        w: 320,
-        keys: normalizeKeys(
-          [
-            { t: 0.3, alpha: 0, angle: -0.07 },
-            { t: 0.9, alpha: 1, angle: 0.03 },
-            { t: 2.0, angle: -0.04 },
-            { t: Math.max(2.4, Math.min(3.0, span - 0.3)), angle: 0.03 },
-          ],
-          span
-        ),
-      });
-    }
+    planBeats(beats, span).forEach((b, bi) => {
+      const fade = fadeFor(b.relStart, b.relEnd, b.isLast);
+      const beatWin = b.relEnd - b.relStart;
+      const propAsset =
+        b.beat.asset && b.beat.asset.startsWith("@b1/") ? b.beat.asset : null;
+      const kwHasAsset = Boolean(propAsset);
 
-    // Keyword card sliding up + underline drawing itself.
-    const kwY = plane.planeH * (i === 0 ? 0.3 : 0.27);
-    const kwHasAsset = Boolean(scene.asset && scene.asset.startsWith("@b1/"));
-    if (scene.keyword) {
-      layers.push({
-        type: "text",
-        text: scene.keyword.slice(0, 60),
-        x: 560,
-        y: kwY,
-        w: kwHasAsset ? 340 : 620,
-        size: kwHasAsset ? 64 : 76,
-        bold: true,
-        color: ink,
-        keys: normalizeKeys(
-          [
-            { t: 0.15, alpha: 0, y: kwY + 28 },
-            { t: 0.75, alpha: 1, y: kwY },
-          ],
-          span
-        ),
-      });
-      layers.push({
-        type: "underline",
-        x: 560,
-        y: kwY + (kwHasAsset ? 88 : 104),
-        w: 300,
-        lineWidth: 7,
-        color: ink,
-        keys: normalizeKeys(
-          [
-            { t: 0.9, progress: 0 },
-            { t: 1.9, progress: 1 },
-          ],
-          span
-        ),
-      });
-    }
+      // Stickman: pose berubah tiap beat, bobbing sepanjang beat. Atlas pose
+      // hanya sah untuk gaya B1 (aturan renderer) — B2 memakai kartu + prop.
+      if (input.styleB === "B1") {
+        layers.push({
+          type: "pose",
+          pose: b.beat.pose,
+          x: stickBaseX,
+          y: stickBaseY,
+          w: stickW,
+          from: round3(b.relStart),
+          // `to` memakai span mentah (identik dengan hitungan validator) dan
+          // di-clamp — round3(span) bisa membulatkan ke ATAS dan melanggar.
+          to: Math.min(b.isLast ? span : b.relEnd, span),
+          keys: stickKeys(b.relStart, b.relEnd, stickBaseY, stickBaseX, fade, span),
+        });
+      }
 
-    if (scene.overlay === "arrow" && span >= 2.5) {
-      layers.push({
-        type: "arrow",
-        x: 580,
-        y: plane.planeH * 0.62,
-        w: 320,
-        color: ink,
-        keys: normalizeKeys(
-          [
-            { t: 1.2, progress: 0 },
-            { t: 2.3, progress: 1 },
-            { t: span - 0.5, alpha: 1 },
-            { t: span - 0.1, alpha: 0 },
-          ],
-          span
-        ),
+      // Kartu kata kunci per beat.
+      const label = (b.beat.label || scene.keyword).slice(0, 34);
+      if (label) {
+        const kwY = plane.planeH * (i === 0 ? 0.3 : 0.27) + (bi % 2 === 1 ? (is916 ? 44 : 40) : 0);
+        layers.push({
+          type: "text",
+          text: label,
+          x: 560,
+          y: kwY,
+          w: kwHasAsset ? 340 : is916 ? 620 : 560,
+          size: kwHasAsset ? 62 : is916 ? 72 : 64,
+          bold: true,
+          color: ink,
+          keys: cardKeys(b.relStart, b.relEnd, kwY, span, b.isLast),
+        });
+        // Aksen menggambar sendiri: underline (umum) atau arrow (sorotan).
+        const accent = b.beat.accent === "arrow" && beatWin >= 2.4 ? "arrow" : "underline";
+        if (accent === "arrow") {
+          layers.push({
+            type: "arrow",
+            x: 580,
+            y: plane.planeH * (is916 ? 0.62 : 0.6),
+            w: 320,
+            color: ink,
+            keys: strokeKeys(b.relStart, b.relEnd, 1.0, span, b.isLast),
+          });
+        } else if (beatWin >= 1.6) {
+          layers.push({
+            type: "underline",
+            x: 560,
+            y: kwY + (kwHasAsset ? 88 : 104),
+            w: 300,
+            lineWidth: 7,
+            color: ink,
+            keys: strokeKeys(b.relStart, b.relEnd, 0.9, span, b.isLast),
+          });
+        }
+      }
+
+      // Prop krayon terikat beat: posisi bergantian kanan-atas / kanan-tengah.
+      if (propAsset) {
+        const pos = bi % 2 === 0 ? propA : propB;
+        layers.push({
+          type: "image",
+          path: propAsset,
+          x: pos.x,
+          y: pos.y,
+          w: pos.w,
+          from: round3(b.relStart),
+          to: Math.min(b.isLast ? span : b.relEnd, span),
+          keys: propKeys(b.relStart, b.relEnd, span, b.isLast),
+        });
+      }
+
+      // SFX pop kecil di awal tiap beat (menegaskan ritme narasi).
+      sfx.push({
+        time: round2(shotStart + b.relStart + 0.12),
+        kind: sfxKinds[(i * 2 + bi) % sfxKinds.length],
+        gain: 0.12,
       });
-    }
+    });
 
-    shots.push({ start: Number(shotStart.toFixed(3)), end: Number(shotEnd.toFixed(3)), layers });
+    shots.push({ start: round3(shotStart), end: round3(shotEnd), layers });
 
-    // Scene caption: single-line chunks inside the scene window.
-    const maxChars = input.ratio === "9:16" ? 40 : 52;
+    // Scene caption: single-line chunks inside the scene window (semua chunk
+    // selalu tampil — durasi dikompres bila jendela sempit).
+    const maxChars = is916 ? (input.styleB === "B1" ? 44 : 36) : input.styleB === "B1" ? 50 : 44;
     const sceneCues = buildSingleLineCues(
       scene.narration,
       shotStart + (i === 0 ? lead : 0.15),
@@ -510,12 +678,6 @@ export function buildAutopilotProject(input: AutopilotCanvasInput): {
       maxChars
     );
     captions.push(...sceneCues);
-
-    sfx.push({
-      time: Number((shotStart + 0.12).toFixed(2)),
-      kind: sfxKinds[i % sfxKinds.length],
-      gain: 0.14,
-    });
   });
 
   const project: CanvasProject = {
