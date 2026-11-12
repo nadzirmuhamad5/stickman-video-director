@@ -1,0 +1,762 @@
+     1→import fs from "node:fs";
+     2→import path from "node:path";
+     3→import { spawn } from "node:child_process";
+     4→import { jobDir } from "@/lib/production";
+     5→
+     6→// ---------------------------------------------------------------------------
+     7→// Builders for canvas-renderer projects consumed by the installed stickman
+     8→// skill renderer (skills/directing-stickman-videos, @napi-rs/canvas + ffmpeg).
+     9→//
+    10→// A project is {version:1, style:"B1"|"B2", width, height, fps, voice,
+    11→// shots, captions, sfx?}. The renderer enforces:
+    12→//   - duration == voiceDuration + voice.lead + voice.tail (±0.06s)
+    13→//   - shots contiguous, first start == 0, last end == duration
+    14→//   - captions single-line, sequential (start >= previous end, <= duration)
+    15→//   - layer keys: times strictly increasing, t within shot span,
+    16→//     props limited to x/y/w/angle/alpha/progress
+    17→// All motion here is canvas-driven (drift, bobbing, draw-in strokes, fades) —
+    18→// the old ffmpeg Ken Burns zoompan is gone.
+    19→// ---------------------------------------------------------------------------
+    20→
+    21→export type CanvasCue = { start: number; end: number; text: string };
+    22→
+    23→type Layer = {
+    24→  type: "image" | "pose" | "text" | "line" | "arrow" | "underline";
+    25→  path?: string;
+    26→  pose?: number;
+    27→  text?: string;
+    28→  points?: number[][];
+    29→  x?: number;
+    30→  y?: number;
+    31→  w?: number;
+    32→  h?: number;
+    33→  size?: number;
+    34→  bold?: boolean;
+    35→  lineWidth?: number;
+    36→  color?: string;
+    37→  alpha?: number;
+    38→  progress?: number;
+    39→  angle?: number;
+    40→  from?: number;
+    41→  to?: number;
+    42→  keys?: { t: number; x?: number; y?: number; w?: number; angle?: number; alpha?: number; progress?: number }[];
+    43→};
+    44→
+    45→type Shot = { start: number; end: number; layers: Layer[] };
+    46→
+    47→type CanvasProject = {
+    48→  version: 1;
+    49→  style: "B1" | "B2";
+    50→  width: number;
+    51→  height: number;
+    52→  fps: number;
+    53→  grid?: boolean;
+    54→  voice: { path: string; lead: number; tail: number; contains_sfx: false };
+    55→  shots: Shot[];
+    56→  captions: CanvasCue[];
+    57→  sfx?: { time: number; kind: "tap" | "paper" | "pop" | "chime" | "jingle"; gain: number }[];
+    58→};
+    59→
+    60→export const CANVAS_FPS = 24;
+    61→const INK = "#191916";
+    62→const INK_WARM = "#3a3428";
+    63→
+    64→export function styleToCanvas(styleCode: string): { style: "B1" | "B2"; ink: string } {
+    65→  // A1/A2 → B1 (pure white, dark ink); A3–A5 → B2 (warm cream, warm ink).
+    66→  return styleCode === "A1" || styleCode === "A2"
+    67→    ? { style: "B1", ink: INK }
+    68→    : { style: "B2", ink: INK_WARM };
+    69→}
+    70→
+    71→function planeFor(ratio: string): { width: number; height: number; planeW: number; planeH: number } {
+    72→  return ratio === "9:16"
+    73→    ? { width: 720, height: 1280, planeW: 1280, planeH: 2275.5 }
+    74→    : { width: 1280, height: 720, planeW: 1280, planeH: 720 };
+    75→}
+    76→
+    77→// ------------------------------------------------------------------ cues ----
+    78→
+    79→/** Split narration into single-line chunks that never exceed maxChars. */
+    80→export function chunkSingleLine(text: string, maxChars: number): string[] {
+    81→  const words = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+    82→  const chunks: string[] = [];
+    83→  let buffer: string[] = [];
+    84→  for (const w of words) {
+    85→    const next = buffer.length ? `${buffer.join(" ")} ${w}` : w;
+    86→    if (next.length > maxChars && buffer.length) {
+    87→      chunks.push(buffer.join(" "));
+    88→      buffer = [w];
+    89→    } else {
+    90→      buffer.push(w);
+    91→    }
+    92→  }
+    93→  if (buffer.length) chunks.push(buffer.join(" "));
+    94→  // Pecahan terakhir yang terlalu pendek digabung ke chunk sebelumnya agar
+    95→  // caption tidak menampilkan satu-dua kata sendirian. Batas gabungan harus
+    96→  // tetap muat SATU baris caption renderer (maks ~1120px: B1 34px ≈ 17.1px/
+    97→  // karakter → ≤58 karakter; B2 40px ≈ 20.1px/karakter → ≤50 karakter).
+    98→  if (chunks.length >= 2 && chunks[chunks.length - 1].length < 9) {
+    99→    const last = chunks.pop()!;
+   100→    const merged = `${chunks[chunks.length - 1]} ${last}`;
+   101→    const cap = Math.min(50, maxChars + 8);
+   102→    if (merged.length <= cap) chunks[chunks.length - 1] = merged;
+   103→    else chunks.push(last);
+   104→  }
+   105→  return chunks;
+   106→}
+   107→
+   108→/**
+   109→ * Sequential non-overlapping single-line cues between startT and endT,
+   110→ * weighted by chunk length. Semua chunk SELALU tampil: bila jendela terlalu
+   111→ * pendek untuk durasi natural, semua durasi dikompres proporsional (bukan
+   112→ * dipotong) sehingga tidak ada caption yang hilang. Enforces the renderer's
+   113→ * caption rules.
+   114→ */
+   115→export function buildSingleLineCues(text: string, startT: number, endT: number, maxChars: number): CanvasCue[] {
+   116→  const chunks = chunkSingleLine(text, maxChars);
+   117→  if (!chunks.length) return [];
+   118→  const usable = Math.max(0.8, endT - startT - 0.25);
+   119→  const weights = chunks.map((c) => Math.max(4, c.length));
+   120→  const sum = weights.reduce((a, b) => a + b, 0);
+   121→  const naturals = chunks.map((_, i) => Math.max(0.7, (weights[i] / sum) * usable));
+   122→  const totalNatural = naturals.reduce((a, b) => a + b, 0);
+   123→  const scale = totalNatural > usable ? usable / totalNatural : 1;
+   124→  const cues: CanvasCue[] = [];
+   125→  for (let i = 0; i < chunks.length; i++) {
+   126→    const dur = Math.max(0.45, naturals[i] * scale);
+   127→    const start = i === 0 ? startT : cues[i - 1].end;
+   128→    let end = Math.min(start + dur, endT);
+   129→    if (end - start < 0.35) end = Math.min(endT, start + 0.35);
+   130→    if (end <= start) break;
+   131→    cues.push({ text: chunks[i], start: round3(start), end: round3(end) });
+   132→  }
+   133→  return cues;
+   134→}
+   135→
+   136→function round3(x: number): number {
+   137→  return Number(x.toFixed(3));
+   138→}
+   139→
+   140→/**
+   141→ * Renderer menuntut key times strictly increasing dan t di dalam span.
+   142→ * Normalisasi: buang key di luar span, gabungkan properti pada t yang sama,
+   143→ * lalu urutkan. Dipakai untuk SEMUA layer agar mustahil duplikat t.
+   144→ */
+   145→function normalizeKeys<T extends { t: number }>(keys: T[], span: number): T[] {
+   146→  const byT = new Map<number, T>();
+   147→  for (const k of keys) {
+   148→    if (k.t < 0 || k.t > span - 0.05) continue;
+   149→    const existing = byT.get(k.t);
+   150→    if (existing) Object.assign(existing, k);
+   151→    else byT.set(k.t, { ...k });
+   152→  }
+   153→  return [...byT.values()].sort((a, b) => a.t - b.t);
+   154→}
+   155→
+   156→// --------------------------------------------------------- accents (Mode A) --
+   157→
+   158→function accentLayers(index: number, span: number, planeW: number, planeH: number, ink: string): Layer[] {
+   159→  const out: Layer[] = [];
+   160→  if (span >= 2.2) {
+   161→    out.push({
+   162→      type: "underline",
+   163→      x: 90,
+   164→      y: planeH - (planeH > 720 ? 260 : 175),
+   165→      w: 300,
+   166→      lineWidth: 7,
+   167→      color: ink,
+   168→      keys: normalizeKeys(
+   169→        [
+   170→          { t: 0.9, progress: 0 },
+   171→          { t: 2.0, progress: 1 },
+   172→          { t: span - 0.6, alpha: 1 },
+   173→          { t: span - 0.15, alpha: 0 },
+   174→        ],
+   175→        span
+   176→      ),
+   177→    });
+   178→  }
+   179→  if (span >= 4 && index % 3 !== 1) {
+   180→    out.push({
+   181→      type: "arrow",
+   182→      x: planeW - 460,
+   183→      y: planeH * 0.24,
+   184→      w: 300,
+   185→      color: ink,
+   186→      keys: normalizeKeys(
+   187→        [
+   188→          { t: 2.4, progress: 0 },
+   189→          { t: 3.6, progress: 1 },
+   190→          { t: span - 0.6, alpha: 1 },
+   191→          { t: span - 0.15, alpha: 0 },
+   192→        ],
+   193→        span
+   194→      ),
+   195→    });
+   196→  }
+   197→  if (span >= 5.4 && index % 3 === 2) {
+   198→    out.push({
+   199→      type: "line",
+   200→      x: planeW * 0.55,
+   201→      y: planeH * 0.62,
+   202→      w: 220,
+   203→      lineWidth: 4,
+   204→      color: ink,
+   205→      points: [
+   206→        [0, 6],
+   207→        [55, -8],
+   208→        [110, 10],
+   209→        [165, -6],
+   210→        [220, 4],
+   211→      ],
+   212→      keys: normalizeKeys(
+   213→        [
+   214→          { t: 3.8, progress: 0 },
+   215→          { t: 5.0, progress: 1 },
+   216→          { t: span - 0.6, alpha: 1 },
+   217→          { t: span - 0.15, alpha: 0 },
+   218→        ],
+   219→        span
+   220→      ),
+   221→    });
+   222→  }
+   223→  return out;
+   224→}
+   225→
+   226→// ------------------------------------------------------- Mode A: one clip ----
+   227→
+   228→export type ClipCanvasInput = {
+   229→  jobId: string;
+   230→  index: number;
+   231→  clipCount: number;
+   232→  title: string;
+   233→  styleCode: string;
+   234→  ratio: string;
+   235→  audioDuration: number;
+   236→  narration: string;
+   237→};
+   238→
+   239→/**
+   240→ * Build + write the canvas project for one Director-mode clip. The clip's
+   241→ * narration wav (already produced by the TTS pipeline) is referenced relative
+   242→ * to the project dir. Returns { projectPath, duration, cues }.
+   243→ */
+   244→export function buildClipCanvasProject(input: ClipCanvasInput): {
+   245→  projectPath: string;
+   246→  duration: number;
+   247→  cues: CanvasCue[];
+   248→} {
+   249→  const lead = 0.45;
+   250→  const tail = Math.max(0.15, Math.min(0.7, 12.5 - input.audioDuration - lead));
+   251→  const duration = input.audioDuration + lead + tail;
+   252→  const { style, ink } = styleToCanvas(input.styleCode);
+   253→  const plane = planeFor(input.ratio);
+   254→  const span = duration;
+   255→
+   256→  // Illustration: drawn 10% larger than the plane, then slowly panned —
+   257→  // motion via canvas keys, no Ken Burns zoom.
+   258→  const imgW = plane.planeW * 1.1;
+   259→  const imgH =
+   260→    input.ratio === "9:16"
+   261→      ? imgW * 2 // generated portrait assets are 720x1440 (1:2)
+   262→      : (imgW * 768) / 1344; // landscape assets are 1344x768
+   263→  const xRange = input.ratio === "9:16" ? 110 : 56;
+   264→  const yRange = input.ratio === "9:16" ? 240 : 34;
+   265→
+   266→  const layers: Layer[] = [
+   267→    {
+   268→      type: "image",
+   269→      path: `../../assets/clip-${input.index}.png`,
+   270→      w: imgW,
+   271→      h: imgH,
+   272→      keys: normalizeKeys(
+   273→        [
+   274→          { t: 0, alpha: 0.25, x: -xRange * 0.4, y: -yRange * 0.3 },
+   275→          { t: 0.5, alpha: 1 },
+   276→          { t: span * 0.55, x: -xRange * 0.75, y: -yRange * 0.8 },
+   277→          { t: span, x: -xRange, y: -yRange * 0.35 },
+   278→        ],
+   279→        span
+   280→      ),
+   281→    },
+   282→    ...accentLayers(input.index, span, plane.planeW, plane.planeH, ink),
+   283→  ];
+   284→
+   285→  if (input.index === 1 && input.title && span >= 2.4) {
+   286→    layers.push({
+   287→      type: "text",
+   288→      text: input.title.slice(0, 80),
+   289→      x: 80,
+   290→      y: 70,
+   291→      w: Math.min(680, plane.planeW - 160),
+   292→      size: 58,
+   293→      bold: true,
+   294→      color: ink,
+   295→      keys: normalizeKeys(
+   296→        [
+   297→          { t: 0.3, alpha: 0, y: 92 },
+   298→          { t: 0.9, alpha: 1, y: 70 },
+   299→          { t: Math.min(3.3, span - 1.2), alpha: 1 },
+   300→          { t: Math.min(4.0, span - 0.4), alpha: 0 },
+   301→        ],
+   302→        span
+   303→      ),
+   304→    });
+   305→  }
+   306→
+   307→  // Caption harus muat satu baris: B1 34px ≈ 58 karakter, B2 40px ≈ 50
+   308→  // karakter pada lebar caption 1120px (diukur dengan NotoSans asli).
+   309→  const maxChars =
+   310→    input.ratio === "9:16" ? (style === "B1" ? 44 : 36) : style === "B1" ? 52 : 44;
+   311→  const cues = buildSingleLineCues(input.narration, lead, input.audioDuration + lead, maxChars);
+   312→
+   313→  const project: CanvasProject = {
+   314→    version: 1,
+   315→    style,
+   316→    width: plane.width,
+   317→    height: plane.height,
+   318→    fps: CANVAS_FPS,
+   319→    voice: { path: `../../assets/clip-${input.index}.wav`, lead, tail, contains_sfx: false },
+   320→    shots: [{ start: 0, end: Number(duration.toFixed(3)), layers }],
+   321→    captions: cues,
+   322→  };
+   323→
+   324→  const dir = path.join(jobDir(input.jobId), "canvas", `clip-${input.index}`);
+   325→  fs.mkdirSync(dir, { recursive: true });
+   326→  const projectPath = path.join(dir, "project.json");
+   327→  fs.writeFileSync(projectPath, JSON.stringify(project));
+   328→  return { projectPath, duration, cues };
+   329→}
+   330→
+   331→// ------------------------------------------------- Mode B: autopilot video ----
+   332→
+   333→export type AutopilotBeat = {
+   334→  label: string; // frasa pendek dari/ikut narasi scene
+   335→  pose: 0 | 1 | 2; // B1 pose atlas index
+   336→  asset: string; // "@b1/<file>.png" or "none"
+   337→  accent: "underline" | "arrow" | "none";
+   338→};
+   339→
+   340→export type AutopilotScene = {
+   341→  narration: string;
+   342→  keyword: string;
+   343→  asset: string; // "@b1/<file>.png" or "none"
+   344→  pose: number; // 0 | 1 | 2 (B1 pose atlas)
+   345→  overlay: "underline" | "arrow" | "none";
+   346→  beats: AutopilotBeat[];
+   347→};
+   348→
+   349→export type AutopilotCanvasInput = {
+   350→  jobId: string;
+   351→  title: string;
+   352→  ratio: string;
+   353→  styleB: "B1" | "B2";
+   354→  voiceDuration: number;
+   355→  scenes: AutopilotScene[];
+   356→};
+   357→
+   358→type Keys = NonNullable<Layer["keys"]>;
+   359→
+   360→const STICKMAN_X_916 = 110;
+   361→const STICKMAN_X_169 = 98;
+   362→
+   363→function round2(x: number): number {
+   364→  return Number(x.toFixed(2));
+   365→}
+   366→
+   367→type BeatWin = {
+   368→  relStart: number;
+   369→  relEnd: number;
+   370→  beat: AutopilotBeat;
+   371→  isLast: boolean;
+   372→};
+   373→
+   374→/** Split the scene span into beat windows weighted by label length. */
+   375→function planBeats(beats: AutopilotBeat[], span: number): BeatWin[] {
+   376→  const maxBeats = Math.max(1, Math.floor(span / 1.3));
+   377→  const list = beats.length <= maxBeats ? beats : beats.slice(0, maxBeats);
+   378→  const weights = list.map((b) => Math.max(6, b.label.length));
+   379→  const sum = weights.reduce((a, b) => a + b, 0);
+   380→  const wins: BeatWin[] = [];
+   381→  let acc = 0;
+   382→  for (let i = 0; i < list.length; i++) {
+   383→    const relStart = acc;
+   384→    acc += (weights[i] / sum) * span;
+   385→    wins.push({
+   386→      relStart: round3(relStart),
+   387→      relEnd: round3(i === list.length - 1 ? span : acc),
+   388→      beat: list[i],
+   389→      isLast: i === list.length - 1,
+   390→    });
+   391→  }
+   392→  return wins;
+   393→}
+   394→
+   395→function fadeFor(relStart: number, relEnd: number, isLast: boolean): { inD: number; outD: number } {
+   396→  const win = relEnd - relStart;
+   397→  return {
+   398→    inD: Math.min(0.3, Math.max(0.12, win * 0.3)),
+   399→    outD: isLast ? 0 : Math.min(0.35, Math.max(0.14, win * 0.3)),
+   400→  };
+   401→}
+   402→
+   403→/**
+   404→ * Stickman per beat: crossfade masuk/keluar + bobbing & sway sepanjang
+   405→ * jendela beat (bukan cuma 6 detik pertama), sehingga gerakan terus hidup.
+   406→ */
+   407→function stickKeys(
+   408→  relStart: number,
+   409→  relEnd: number,
+   410→  baseY: number,
+   411→  baseX: number,
+   412→  fade: { inD: number; outD: number },
+   413→  span: number
+   414→): Keys {
+   415→  const keys: Keys = [];
+   416→  keys.push({ t: round3(relStart), alpha: 0, y: baseY + 12, x: baseX });
+   417→  keys.push({ t: round3(relStart + fade.inD), alpha: 1, y: baseY, x: baseX });
+   418→  const endT = Math.min(relEnd, span - 0.06);
+   419→  const period = 0.8;
+   420→  let t = relStart + fade.inD + period;
+   421→  let i = 0;
+   422→  while (t < endT - (fade.outD > 0 ? fade.outD : 0) - 0.08) {
+   423→    keys.push({
+   424→      t: round3(t),
+   425→      y: baseY + (i % 2 === 0 ? -18 : 0),
+   426→      x: baseX + (i % 2 === 1 ? 12 : -12),
+   427→    });
+   428→    t += period;
+   429→    i++;
+   430→  }
+   431→  if (fade.outD > 0) {
+   432→    keys.push({ t: round3(relEnd - fade.outD), alpha: 1 });
+   433→    keys.push({
+   434→      t: round3(Math.max(relEnd - 0.06, relEnd - fade.outD + 0.05)),
+   435→      alpha: 0,
+   436→      y: baseY + 12,
+   437→      x: baseX,
+   438→    });
+   439→  } else if (t - period < endT) {
+   440→    keys.push({ t: round3(t - period + 0.4), y: baseY + (i % 2 === 0 ? -18 : 0), x: baseX });
+   441→  }
+   442→  return normalizeKeys(keys, span);
+   443→}
+   444→
+   445→/** Kartu kata kunci: meluncur naik saat beat mulai, pudar sebelum beat berikut. */
+   446→function cardKeys(relStart: number, relEnd: number, y: number, span: number, isLast: boolean): Keys {
+   447→  const keys: Keys = [];
+   448→  const win = relEnd - relStart;
+   449→  const inD = Math.min(0.3, Math.max(0.12, win * 0.4));
+   450→  keys.push({ t: round3(relStart + 0.1), alpha: 0, y: y + 26 });
+   451→  keys.push({ t: round3(relStart + 0.1 + inD + 0.35), alpha: 1, y });
+   452→  if (!isLast) {
+   453→    const outD = fadeFor(relStart, relEnd, false).outD;
+   454→    keys.push({ t: round3(relEnd - outD), alpha: 1 });
+   455→    keys.push({ t: round3(Math.max(relEnd - 0.06, relEnd - outD + 0.05)), alpha: 0 });
+   456→  }
+   457→  return normalizeKeys(keys, span);
+   458→}
+   459→
+   460→/** Garis/panah yang menggambar sendiri di awal beat, lalu pudar bersama kartu. */
+   461→function strokeKeys(relStart: number, relEnd: number, delay: number, span: number, isLast: boolean): Keys {
+   462→  const keys: Keys = [];
+   463→  keys.push({ t: round3(relStart + delay), progress: 0 });
+   464→  keys.push({ t: round3(Math.min(relStart + delay + 1.0, relEnd - 0.15)), progress: 1 });
+   465→  if (!isLast) {
+   466→    const outD = fadeFor(relStart, relEnd, false).outD;
+   467→    keys.push({ t: round3(relEnd - outD), alpha: 1 });
+   468→    keys.push({ t: round3(Math.max(relEnd - 0.06, relEnd - outD + 0.05)), alpha: 0 });
+   469→  }
+   470→  return normalizeKeys(keys, span);
+   471→}
+   472→
+   473→/** Prop krayon: melayang masuk dengan ayunan lembut, terikat pada jendela beat. */
+   474→function propKeys(relStart: number, relEnd: number, span: number, isLast: boolean): Keys {
+   475→  const keys: Keys = [];
+   476→  keys.push({ t: round3(relStart + 0.12), alpha: 0, angle: -0.07 });
+   477→  keys.push({ t: round3(relStart + 0.5), alpha: 1, angle: 0.03 });
+   478→  let t = relStart + 1.5;
+   479→  let i = 0;
+   480→  while (t < relEnd - 0.3) {
+   481→    keys.push({ t: round3(t), angle: i % 2 === 0 ? -0.04 : 0.03 });
+   482→    t += 1.1;
+   483→    i++;
+   484→  }
+   485→  if (!isLast) {
+   486→    const outD = fadeFor(relStart, relEnd, false).outD;
+   487→    keys.push({ t: round3(relEnd - outD), alpha: 1 });
+   488→    keys.push({ t: round3(Math.max(relEnd - 0.06, relEnd - outD + 0.05)), alpha: 0 });
+   489→  }
+   490→  return normalizeKeys(keys, span);
+   491→}
+   492→
+   493→/**
+   494→ * Build + write the full autopilot project (one shot per scene, 2-4 beats per
+   495→ * scene). Tiap beat punya kartu kata kunci + pose stickman + prop + aksen
+   496→ * yang muncul mengikuti urutan narasi — bukan visual statis satu scene.
+   497→ */
+   498→export function buildAutopilotProject(input: AutopilotCanvasInput): {
+   499→  projectPath: string;
+   500→  duration: number;
+   501→  cues: CanvasCue[];
+   502→} {
+   503→  const lead = 0.5;
+   504→  const tail = 0.9;
+   505→  const duration = input.voiceDuration + lead + tail;
+   506→  const plane = planeFor(input.ratio);
+   507→  const ink = input.styleB === "B2" ? INK_WARM : INK;
+   508→  const is916 = input.ratio === "9:16";
+   509→
+   510→  // Scene spans proportional to narration length. Semua batas langsung
+   511→  // dibulatkan ke 3 desimal agar identik dengan shot.start/end yang dibaca
+   512→  // validator renderer (span = round(end) - round(start)), sehingga key &
+   513→  // layer from/to tidak pernah melampaui span.
+   514→  const weights = input.scenes.map((s) => Math.max(10, s.narration.length));
+   515→  const weightSum = weights.reduce((a, b) => a + b, 0);
+   516→  const usable = Math.max(1, duration - lead - tail);
+   517→  const starts: number[] = [];
+   518→  let acc = 0;
+   519→  for (let i = 0; i < input.scenes.length; i++) {
+   520→    starts.push(round3(acc));
+   521→    acc += (weights[i] / weightSum) * usable;
+   522→  }
+   523→  const ends: number[] = input.scenes.map((_, i) =>
+   524→    i === input.scenes.length - 1 ? round3(duration) : starts[i + 1]
+   525→  );
+   526→
+   527→  const stickBaseX = is916 ? STICKMAN_X_916 : STICKMAN_X_169;
+   528→  const stickBaseY = plane.planeH * (is916 ? 0.36 : 0.3);
+   529→  const stickW = is916 ? 380 : 300;
+   530→  const propA = is916
+   531→    ? { x: plane.planeW - 430, y: 120, w: 320 }
+   532→    : { x: plane.planeW - 360, y: 64, w: 240 };
+   533→  const propB = is916
+   534→    ? { x: plane.planeW - 380, y: plane.planeH * 0.42, w: 270 }
+   535→    : { x: plane.planeW - 330, y: plane.planeH * 0.42, w: 220 };
+   536→
+   537→  const shots: Shot[] = [];
+   538→  const captions: CanvasCue[] = [];
+   539→  const sfx: NonNullable<CanvasProject["sfx"]> = [];
+   540→  const sfxKinds = ["pop", "chime", "paper", "tap"] as const;
+   541→
+   542→  input.scenes.forEach((scene, i) => {
+   543→    const shotStart = starts[i];
+   544→    const shotEnd = ends[i];
+   545→    const span = Math.max(0.8, shotEnd - shotStart);
+   546→    const layers: Layer[] = [];
+   547→
+   548→    // Title card on the opening scene.
+   549→    if (i === 0 && input.title && span >= 1.2) {
+   550→      layers.push({
+   551→        type: "text",
+   552→        text: input.title.slice(0, 80),
+   553→        x: 90,
+   554→        y: is916 ? plane.planeH * 0.1 : 60,
+   555→        w: is916 ? 720 : 780,
+   556→        size: is916 ? 84 : 76,
+   557→        bold: true,
+   558→        color: ink,
+   559→        keys: normalizeKeys(
+   560→          [
+   561→            { t: 0.2, alpha: 0, y: (is916 ? plane.planeH * 0.1 : 60) + 22 },
+   562→            { t: 0.8, alpha: 1, y: is916 ? plane.planeH * 0.1 : 60 },
+   563→            { t: Math.min(2.8, span - 0.7), alpha: 1 },
+   564→            { t: Math.min(3.4, span - 0.15), alpha: 0 },
+   565→          ],
+   566→          span
+   567→        ),
+   568→      });
+   569→    }
+   570→
+   571→    // Beats: fallback satu beat dari scene bila model tidak memberi beats.
+   572→    const beats: AutopilotBeat[] = scene.beats.length
+   573→      ? scene.beats
+   574→      : [
+   575→          {
+   576→            label: (scene.keyword || scene.narration.split(" ").slice(0, 3).join(" ")).slice(0, 34),
+   577→            pose: (Math.max(0, Math.min(2, Math.round(scene.pose))) as 0 | 1 | 2),
+   578→            asset: scene.asset,
+   579→            accent: scene.overlay,
+   580→          },
+   581→        ];
+   582→
+   583→    planBeats(beats, span).forEach((b, bi) => {
+   584→      const fade = fadeFor(b.relStart, b.relEnd, b.isLast);
+   585→      const beatWin = b.relEnd - b.relStart;
+   586→      const propAsset =
+   587→        b.beat.asset && b.beat.asset.startsWith("@b1/") ? b.beat.asset : null;
+   588→      const kwHasAsset = Boolean(propAsset);
+   589→
+   590→      // Stickman: pose berubah tiap beat, bobbing sepanjang beat. Atlas pose
+   591→      // hanya sah untuk gaya B1 (aturan renderer) — B2 memakai kartu + prop.
+   592→      if (input.styleB === "B1") {
+   593→        layers.push({
+   594→          type: "pose",
+   595→          pose: b.beat.pose,
+   596→          x: stickBaseX,
+   597→          y: stickBaseY,
+   598→          w: stickW,
+   599→          from: round3(b.relStart),
+   600→          // `to` memakai span mentah (identik dengan hitungan validator) dan
+   601→          // di-clamp — round3(span) bisa membulatkan ke ATAS dan melanggar.
+   602→          to: Math.min(b.isLast ? span : b.relEnd, span),
+   603→          keys: stickKeys(b.relStart, b.relEnd, stickBaseY, stickBaseX, fade, span),
+   604→        });
+   605→      }
+   606→
+   607→      // Kartu kata kunci per beat.
+   608→      const label = (b.beat.label || scene.keyword).slice(0, 34);
+   609→      if (label) {
+   610→        const kwY = plane.planeH * (i === 0 ? 0.3 : 0.27) + (bi % 2 === 1 ? (is916 ? 44 : 40) : 0);
+   611→        layers.push({
+   612→          type: "text",
+   613→          text: label,
+   614→          x: 560,
+   615→          y: kwY,
+   616→          w: kwHasAsset ? 340 : is916 ? 620 : 560,
+   617→          size: kwHasAsset ? 62 : is916 ? 72 : 64,
+   618→          bold: true,
+   619→          color: ink,
+   620→          keys: cardKeys(b.relStart, b.relEnd, kwY, span, b.isLast),
+   621→        });
+   622→        // Aksen menggambar sendiri: underline (umum) atau arrow (sorotan).
+   623→        const accent = b.beat.accent === "arrow" && beatWin >= 2.4 ? "arrow" : "underline";
+   624→        if (accent === "arrow") {
+   625→          layers.push({
+   626→            type: "arrow",
+   627→            x: 580,
+   628→            y: plane.planeH * (is916 ? 0.62 : 0.6),
+   629→            w: 320,
+   630→            color: ink,
+   631→            keys: strokeKeys(b.relStart, b.relEnd, 1.0, span, b.isLast),
+   632→          });
+   633→        } else if (beatWin >= 1.6) {
+   634→          layers.push({
+   635→            type: "underline",
+   636→            x: 560,
+   637→            y: kwY + (kwHasAsset ? 88 : 104),
+   638→            w: 300,
+   639→            lineWidth: 7,
+   640→            color: ink,
+   641→            keys: strokeKeys(b.relStart, b.relEnd, 0.9, span, b.isLast),
+   642→          });
+   643→        }
+   644→      }
+   645→
+   646→      // Prop krayon terikat beat: posisi bergantian kanan-atas / kanan-tengah.
+   647→      if (propAsset) {
+   648→        const pos = bi % 2 === 0 ? propA : propB;
+   649→        layers.push({
+   650→          type: "image",
+   651→          path: propAsset,
+   652→          x: pos.x,
+   653→          y: pos.y,
+   654→          w: pos.w,
+   655→          from: round3(b.relStart),
+   656→          to: Math.min(b.isLast ? span : b.relEnd, span),
+   657→          keys: propKeys(b.relStart, b.relEnd, span, b.isLast),
+   658→        });
+   659→      }
+   660→
+   661→      // SFX pop kecil di awal tiap beat (menegaskan ritme narasi).
+   662→      sfx.push({
+   663→        time: round2(shotStart + b.relStart + 0.12),
+   664→        kind: sfxKinds[(i * 2 + bi) % sfxKinds.length],
+   665→        gain: 0.12,
+   666→      });
+   667→    });
+   668→
+   669→    shots.push({ start: round3(shotStart), end: round3(shotEnd), layers });
+   670→
+   671→    // Scene caption: single-line chunks inside the scene window (semua chunk
+   672→    // selalu tampil — durasi dikompres bila jendela sempit).
+   673→    const maxChars = is916 ? (input.styleB === "B1" ? 44 : 36) : input.styleB === "B1" ? 50 : 44;
+   674→    const sceneCues = buildSingleLineCues(
+   675→      scene.narration,
+   676→      shotStart + (i === 0 ? lead : 0.15),
+   677→      shotEnd - 0.12,
+   678→      maxChars
+   679→    );
+   680→    captions.push(...sceneCues);
+   681→  });
+   682→
+   683→  const project: CanvasProject = {
+   684→    version: 1,
+   685→    style: input.styleB,
+   686→    width: plane.width,
+   687→    height: plane.height,
+   688→    fps: CANVAS_FPS,
+   689→    grid: input.styleB === "B1",
+   690→    voice: { path: "voice.wav", lead, tail, contains_sfx: false },
+   691→    shots,
+   692→    captions,
+   693→    sfx,
+   694→  };
+   695→
+   696→  const dir = path.join(jobDir(input.jobId), "canvas");
+   697→  fs.mkdirSync(dir, { recursive: true });
+   698→  const projectPath = path.join(dir, "project.json");
+   699→  fs.writeFileSync(projectPath, JSON.stringify(project));
+   700→  return { projectPath, duration, cues: captions };
+   701→}
+   702→
+   703→// ------------------------------------------------------------- render exec ---
+   704→
+   705→export type RenderProgressLine = { shot?: number; total?: number };
+   706→
+   707→/**
+   708→ * Spawn the skill's canvas renderer for a project file. onShot reports
+   709→ * per-shot progress lines from the renderer.
+   710→ */
+   711→export function runCanvasRender(
+   712→  projectPath: string,
+   713→  onShot?: (line: RenderProgressLine) => void
+   714→): Promise<{ output: string; duration: number; frames: number }> {
+   715→  const wrapper = path.join(process.cwd(), "scripts", "render-autopilot.mjs");
+   716→  return new Promise((resolve, reject) => {
+   717→    const child = spawn("node", [wrapper, projectPath], {
+   718→      stdio: ["ignore", "pipe", "pipe"],
+   719→      env: { ...process.env, FORCE_COLOR: "0" },
+   720→    });
+   721→    let allOut = "";
+   722→    let lineBuf = "";
+   723→    let stderr = "";
+   724→    child.stdout.on("data", (b: Buffer) => {
+   725→      const text = b.toString();
+   726→      allOut += text;
+   727→      lineBuf += text;
+   728→      const lines = lineBuf.split("\n");
+   729→      lineBuf = lines.pop() ?? "";
+   730→      for (const line of lines) {
+   731→        const trimmed = line.trim();
+   732→        if (!trimmed.startsWith("{")) continue;
+   733→        try {
+   734→          const parsed = JSON.parse(trimmed) as RenderProgressLine;
+   735→          if (typeof parsed.shot === "number" && onShot) onShot(parsed);
+   736→        } catch {
+   737→          // bukan baris progress — abaikan
+   738→        }
+   739→      }
+   740→    });
+   741→    child.stderr.on("data", (b: Buffer) => (stderr = (stderr + b.toString()).slice(-3000)));
+   742→    child.on("error", reject);
+   743→    child.on("close", (code) => {
+   744→      if (code !== 0) {
+   745→        reject(new Error(`Canvas renderer exit ${code}: ${stderr || "tanpa stderr"}`));
+   746→        return;
+   747→      }
+   748→      const marker = allOut.indexOf("REPORT_JSON:");
+   749→      if (marker === -1) {
+   750→        reject(new Error(`Laporan renderer tidak ditemukan: ${stderr || allOut.slice(-400)}`));
+   751→        return;
+   752→      }
+   753→      try {
+   754→        const report = JSON.parse(allOut.slice(marker + "REPORT_JSON:".length).trim());
+   755→        resolve(report);
+   756→      } catch (err) {
+   757→        reject(new Error(`Laporan renderer tidak valid: ${err instanceof Error ? err.message : err}`));
+   758→      }
+   759→    });
+   760→  });
+   761→}
+   762→
