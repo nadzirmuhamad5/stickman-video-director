@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { execFile } from "child_process";
 import { join } from "path";
+import { maskKey, readGeminiKey } from "@/lib/settings";
+import { getStatusCache, setStatusCache } from "@/lib/status-cache";
 
 type DoctorCheck = {
   label: string;
@@ -14,6 +16,8 @@ type StatusPayload = {
   doctor: DoctorCheck[];
   edgeTts: { ok: boolean; detail: string };
   geminiKeyPresent: boolean;
+  geminiKeySource: "env" | "file" | null;
+  geminiKeyMasked: string | null;
   networkChecked: boolean;
   note: string;
   testsRunAtInstall: { total: number; passed: number; failed: number };
@@ -21,15 +25,22 @@ type StatusPayload = {
 
 const SKILL_DIR = join(process.cwd(), "skills", "directing-stickman-videos");
 
-let cache: { at: number; payload: StatusPayload } | null = null;
 const CACHE_MS = 5 * 60 * 1000;
 
-function runDoctor(): Promise<{ stdout: string; stderr: string; code: number }> {
+function runDoctor(geminiKey: string | null): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
     execFile(
       "node",
       ["scripts/autopilot.mjs", "doctor"],
-      { cwd: SKILL_DIR, timeout: 20_000, encoding: "utf8" },
+      {
+        cwd: SKILL_DIR,
+        timeout: 20_000,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          ...(geminiKey ? { GEMINI_API_KEY: geminiKey } : {}),
+        },
+      },
       (error, stdout, stderr) => {
         resolve({
           stdout: typeof stdout === "string" ? stdout : "",
@@ -62,11 +73,13 @@ function checkEdgeTts(): Promise<{ ok: boolean; detail: string }> {
 }
 
 export async function GET() {
+  const cache = getStatusCache();
   if (cache && Date.now() - cache.at < CACHE_MS) {
-    return NextResponse.json(cache.payload);
+    return NextResponse.json(cache.payload as StatusPayload);
   }
 
-  const { stdout } = await runDoctor();
+  const geminiKey = readGeminiKey();
+  const { stdout } = await runDoctor(geminiKey?.key ?? null);
   let parsed: Record<string, unknown> = {};
   try {
     const start = stdout.indexOf("{");
@@ -100,7 +113,9 @@ export async function GET() {
     skillPath: "skills/directing-stickman-videos",
     doctor,
     edgeTts,
-    geminiKeyPresent: parsed.gemini_key_present === true,
+    geminiKeyPresent: Boolean(geminiKey) || parsed.gemini_key_present === true,
+    geminiKeySource: geminiKey?.source ?? null,
+    geminiKeyMasked: geminiKey ? maskKey(geminiKey.key) : null,
     networkChecked: parsed.network_checked === true,
     note:
       typeof parsed.note === "string"
@@ -109,6 +124,6 @@ export async function GET() {
     testsRunAtInstall: { total: 102, passed: 102, failed: 0 },
   };
 
-  cache = { at: Date.now(), payload };
+  setStatusCache(payload);
   return NextResponse.json(payload);
 }

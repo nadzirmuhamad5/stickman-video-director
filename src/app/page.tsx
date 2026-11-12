@@ -32,6 +32,7 @@ import {
   RefreshCw,
   Volume2,
   Languages,
+  KeyRound,
 } from "lucide-react";
 import { STYLES, SELECTABLE_STYLES, DURATIONS, type StickmanStyle } from "@/lib/stickman-styles";
 import { TTS_VOICES, DEFAULT_VOICE } from "@/lib/tts-voices";
@@ -87,6 +88,8 @@ type StatusPayload = {
   doctor: { label: string; ok: boolean; detail: string }[];
   edgeTts?: { ok: boolean; detail: string };
   geminiKeyPresent: boolean;
+  geminiKeySource?: "env" | "file" | null;
+  geminiKeyMasked?: string | null;
   networkChecked: boolean;
   note: string;
   testsRunAtInstall: { total: number; passed: number; failed: number };
@@ -173,6 +176,81 @@ export default function Home() {
     } catch (err) {
       setPreviewing(false);
       setProdError(err instanceof Error ? err.message : "Gagal memutar contoh suara.");
+    }
+  }
+
+  // Gemini key editor (Status panel) state
+  const [showKeyEditor, setShowKeyEditor] = useState(false);
+  const [geminiInput, setGeminiInput] = useState("");
+  const [geminiBusy, setGeminiBusy] = useState(false);
+  const [geminiMsg, setGeminiMsg] = useState<{ kind: "ok" | "warn" | "error"; text: string } | null>(null);
+
+  function patchStatusGemini(present: boolean, source: "env" | "file" | null, masked: string | null) {
+    setStatus((prev) => (prev ? { ...prev, geminiKeyPresent: present, geminiKeySource: source, geminiKeyMasked: masked } : prev));
+  }
+
+  async function loadGeminiInfo(): Promise<{ present: boolean; masked: string | null; source: "env" | "file" | null } | null> {
+    try {
+      const res = await fetch("/api/settings/gemini");
+      if (!res.ok) return null;
+      const d = await res.json();
+      return { present: Boolean(d.present), masked: d.masked ?? null, source: d.source ?? null };
+    } catch {
+      return null;
+    }
+  }
+
+  async function saveGeminiKeyAction() {
+    const key = geminiInput.trim();
+    if (!key) {
+      setGeminiMsg({ kind: "error", text: "Tempel dulu API key-nya." });
+      return;
+    }
+    setGeminiBusy(true);
+    setGeminiMsg(null);
+    try {
+      const res = await fetch("/api/settings/gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setGeminiMsg({ kind: "error", text: data.error ?? "Gagal menyimpan key." });
+        return;
+      }
+      const info = await loadGeminiInfo();
+      if (info) patchStatusGemini(info.present, info.source, info.masked);
+      setGeminiInput("");
+      setGeminiMsg(
+        data.warning
+          ? { kind: "warn", text: `Tersimpan, dengan catatan: ${data.warning}` }
+          : { kind: "ok", text: "Key tersimpan. Status sekarang: Key terdeteksi." }
+      );
+    } catch {
+      setGeminiMsg({ kind: "error", text: "Koneksi ke server gagal. Coba lagi." });
+    } finally {
+      setGeminiBusy(false);
+    }
+  }
+
+  async function clearGeminiKeyAction() {
+    setGeminiBusy(true);
+    setGeminiMsg(null);
+    try {
+      const res = await fetch("/api/settings/gemini", { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        setGeminiMsg({ kind: "error", text: data.error ?? "Gagal menghapus key." });
+        return;
+      }
+      const info = await loadGeminiInfo();
+      if (info) patchStatusGemini(info.present, info.source, info.masked);
+      setGeminiMsg({ kind: "ok", text: "Key dihapus dari web." });
+    } catch {
+      setGeminiMsg({ kind: "error", text: "Koneksi ke server gagal. Coba lagi." });
+    } finally {
+      setGeminiBusy(false);
     }
   }
 
@@ -1002,18 +1080,96 @@ export default function Home() {
                       {status.edgeTts?.detail ?? "Memeriksa…"}
                     </Badge>
                   </div>
-                  <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-background px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      {status.geminiKeyPresent ? (
-                        <CircleCheck className="h-5 w-5 shrink-0 text-green-500" />
-                      ) : (
-                        <CircleAlert className="h-5 w-5 shrink-0 text-amber-500" />
-                      )}
-                      <span className="text-sm font-medium">Layanan image generation (Gemini)</span>
+                  <div className="rounded-xl border border-border/70 bg-background px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        {status.geminiKeyPresent ? (
+                          <CircleCheck className="h-5 w-5 shrink-0 text-green-500" />
+                        ) : (
+                          <CircleAlert className="h-5 w-5 shrink-0 text-amber-500" />
+                        )}
+                        <span className="text-sm font-medium">Layanan image generation (Gemini)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={status.geminiKeyPresent ? "border-green-500/40 text-green-500" : "border-amber-500/40 text-amber-500"}
+                        >
+                          {status.geminiKeyPresent
+                            ? `Key terdeteksi${status.geminiKeyMasked ? ` · ${status.geminiKeyMasked}` : ""}`
+                            : "Belum dikonfigurasi"}
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-[11px]"
+                          onClick={() => {
+                            setShowKeyEditor((v) => !v);
+                            setGeminiMsg(null);
+                          }}
+                        >
+                          <KeyRound className="mr-1 h-3 w-3" />
+                          {showKeyEditor ? "Tutup" : "Atur di web"}
+                        </Button>
+                      </div>
                     </div>
-                    <Badge variant="outline" className={status.geminiKeyPresent ? "border-green-500/40 text-green-500" : "border-amber-500/40 text-amber-500"}>
-                      {status.geminiKeyPresent ? "Key terdeteksi" : "Belum dikonfigurasi"}
-                    </Badge>
+
+                    {showKeyEditor && (
+                      <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
+                        {status.geminiKeyPresent && status.geminiKeyMasked && (
+                          <p className="text-xs text-muted-foreground">
+                            Key tersimpan ({status.geminiKeySource === "env" ? "dari file .env" : "dari web"}):{" "}
+                            <code className="rounded bg-stone-800 px-1.5 py-0.5">{status.geminiKeyMasked}</code> — tempel
+                            key baru untuk menggantinya.
+                          </p>
+                        )}
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <Input
+                            type="password"
+                            autoComplete="off"
+                            placeholder="Tempel Gemini API key (AIza…)"
+                            value={geminiInput}
+                            onChange={(e) => setGeminiInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !geminiBusy) saveGeminiKeyAction();
+                            }}
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={saveGeminiKeyAction}
+                              disabled={geminiBusy || !geminiInput.trim()}
+                              className="bg-amber-500 text-stone-950 hover:bg-amber-400"
+                            >
+                              {geminiBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                              Simpan
+                            </Button>
+                            {status.geminiKeyPresent && status.geminiKeySource !== "env" && (
+                              <Button variant="destructive" onClick={clearGeminiKeyAction} disabled={geminiBusy}>
+                                Hapus
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-[11px] leading-relaxed text-muted-foreground">
+                          Key disimpan di server ini, hanya tampil tersamar, dan langsung dipakai tanpa restart. Dipakai
+                          untuk mode Autopilot skill (image gen &amp; speech Gemini) — Studio di halaman ini tidak
+                          memerlukannya.
+                        </p>
+                        {geminiMsg && (
+                          <p
+                            className={
+                              geminiMsg.kind === "error"
+                                ? "text-xs text-red-500"
+                                : geminiMsg.kind === "warn"
+                                  ? "text-xs text-amber-500"
+                                  : "text-xs text-green-500"
+                            }
+                          >
+                            {geminiMsg.text}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <p className="px-1 text-xs leading-relaxed text-muted-foreground">
                     {status.note} Mode A (Director) tidak memerlukan key apa pun. Runtime skill terpasang di{" "}
