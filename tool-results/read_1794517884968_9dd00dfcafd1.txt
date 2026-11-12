@@ -1,0 +1,616 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useRef, useState } from "react";
+     4→import { Button } from "@/components/ui/button";
+     5→import { Badge } from "@/components/ui/badge";
+     6→import { Card, CardContent } from "@/components/ui/card";
+     7→import { Input } from "@/components/ui/input";
+     8→import { Label } from "@/components/ui/label";
+     9→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+    10→import { Skeleton } from "@/components/ui/skeleton";
+    11→import { Textarea } from "@/components/ui/textarea";
+    12→import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+    13→import {
+    14→  Clapperboard,
+    15→  Film,
+    16→  Github,
+    17→  MonitorPlay,
+    18→  Wand2,
+    19→  CircleCheck,
+    20→  CircleAlert,
+    21→  Loader2,
+    22→  Mic,
+    23→  Music,
+    24→  ArrowDown,
+    25→  Sparkles,
+    26→  ShieldCheck,
+    27→  Scissors,
+    28→  FileText,
+    29→  Play,
+    30→} from "lucide-react";
+    31→import { STYLES, SELECTABLE_STYLES, DURATIONS, type StickmanStyle } from "@/lib/stickman-styles";
+    32→
+    33→type ProposalClip = {
+    34→  index: number;
+    35→  stage: string;
+    36→  time: string;
+    37→  narrationEn: string;
+    38→  narrationId: string;
+    39→  beats: string[];
+    40→  devices: string[];
+    41→  transition: string;
+    42→};
+    43→
+    44→type Proposal = {
+    45→  title: string;
+    46→  logline: string;
+    47→  ratio: string;
+    48→  durationSeconds: number;
+    49→  styleCode: string;
+    50→  styleName: string;
+    51→  voiceProfile: string;
+    52→  bgm: string;
+    53→  clips: ProposalClip[];
+    54→};
+    55→
+    56→type StatusPayload = {
+    57→  skillInstalled: boolean;
+    58→  skillPath: string;
+    59→  doctor: { label: string; ok: boolean; detail: string }[];
+    60→  geminiKeyPresent: boolean;
+    61→  networkChecked: boolean;
+    62→  note: string;
+    63→  testsRunAtInstall: { total: number; passed: number; failed: number };
+    64→};
+    65→
+    66→export default function Home() {
+    67→  const [selectedStyle, setSelectedStyle] = useState<string>("A1");
+    68→  const [topic, setTopic] = useState("");
+    69→  const [ratio, setRatio] = useState<"16:9" | "9:16">("16:9");
+    70→  const [durationSeconds, setDurationSeconds] = useState<number>(60);
+    71→  const [loading, setLoading] = useState(false);
+    72→  const [error, setError] = useState<string | null>(null);
+    73→  const [proposal, setProposal] = useState<Proposal | null>(null);
+    74→  const [status, setStatus] = useState<StatusPayload | null>(null);
+    75→  const studioRef = useRef<HTMLDivElement>(null);
+    76→
+    77→  useEffect(() => {
+    78→    fetch("/api/system/status")
+    79→      .then((r) => (r.ok ? r.json() : null))
+    80→      .then((d) => setStatus(d))
+    81→      .catch(() => setStatus(null));
+    82→  }, []);
+    83→
+    84→  function pickStyle(style: StickmanStyle) {
+    85→    if (!style.selectable) return;
+    86→    setSelectedStyle(style.code);
+    87→    studioRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    88→  }
+    89→
+    90→  async function generateProposal() {
+    91→    if (!topic.trim()) {
+    92→      setError("Tulis dulu topik atau tempel naskah Anda.");
+    93→      return;
+    94→    }
+    95→    const style = SELECTABLE_STYLES.find((s) => s.code === selectedStyle);
+    96→    if (!style) {
+    97→      setError("Pilih salah satu gaya A1–A5.");
+    98→      return;
+    99→    }
+   100→    setLoading(true);
+   101→    setError(null);
+   102→    setProposal(null);
+   103→    try {
+   104→      const res = await fetch("/api/director/proposal", {
+   105→        method: "POST",
+   106→        headers: { "Content-Type": "application/json" },
+   107→        body: JSON.stringify({
+   108→          topic,
+   109→          ratio,
+   110→          durationSeconds,
+   111→          styleCode: style.code,
+   112→          styleName: `${style.name} (${style.tagline})`,
+   113→        }),
+   114→      });
+   115→      const data = await res.json();
+   116→      if (!res.ok) {
+   117→        setError(data.error ?? "Gagal menghasilkan proposal.");
+   118→      } else {
+   119→        setProposal(data.proposal as Proposal);
+   120→      }
+   121→    } catch {
+   122→      setError("Koneksi ke server gagal. Coba lagi.");
+   123→    } finally {
+   124→      setLoading(false);
+   125→    }
+   126→  }
+   127→
+   128→  const clipCount = Math.round(durationSeconds / 10);
+   129→
+   130→  return (
+   131→    <div className="dark min-h-screen flex flex-col bg-background text-foreground">
+   132→      {/* NAVBAR */}
+   133→      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur">
+   134→        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
+   135→          <div className="flex min-w-0 items-center gap-2">
+   136→            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-stone-950">
+   137→              <Clapperboard className="h-4 w-4" />
+   138→            </span>
+   139→            <span className="truncate text-sm font-semibold tracking-tight">
+   140→              Stickman Video Director
+   141→            </span>
+   142→            <Badge variant="outline" className="ml-1 hidden border-amber-500/50 text-amber-500 sm:inline-flex">
+   143→              Terpasang
+   144→            </Badge>
+   145→          </div>
+   146→          <nav className="flex items-center gap-1 sm:gap-3">
+   147→            <a href="#gaya" className="hidden rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground sm:block">
+   148→              Gaya
+   149→            </a>
+   150→            <a href="#studio" className="hidden rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground sm:block">
+   151→              Studio
+   152→            </a>
+   153→            <a href="#status" className="hidden rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground sm:block">
+   154→              Status
+   155→            </a>
+   156→            <a
+   157→              href="https://github.com/kaomei/stickman-video-director"
+   158→              target="_blank"
+   159→              rel="noreferrer"
+   160→              className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-accent"
+   161→            >
+   162→              <Github className="h-3.5 w-3.5" />
+   163→              Repo
+   164→            </a>
+   165→          </nav>
+   166→        </div>
+   167→      </header>
+   168→
+   169→      <main className="flex-1">
+   170→        {/* HERO */}
+   171→        <section className="border-b border-border/60 bg-gradient-to-b from-amber-500/[0.07] to-transparent">
+   172→          <div className="mx-auto max-w-6xl px-4 py-14 text-center sm:py-20">
+   173→            <Badge variant="outline" className="mb-5 border-amber-500/40 bg-amber-500/10 text-amber-500">
+   174→              <Sparkles className="mr-1 h-3 w-3" /> Skill open source · MIT License
+   175→            </Badge>
+   176→            <h1 className="mx-auto max-w-3xl text-balance text-3xl font-bold tracking-tight sm:text-5xl">
+   177→              Ubah naskah apa pun jadi{" "}
+   178→              <span className="text-amber-500">video animasi stickman</span> yang siap unggah
+   179→            </h1>
+   180→            <p className="mx-auto mt-4 max-w-2xl text-pretty text-sm text-muted-foreground sm:text-base">
+   181→              Dua mode dalam satu skill: <strong className="text-foreground">Director</strong> untuk
+   182→              storyboard &amp; prompt per adegan, dan <strong className="text-foreground">Autopilot</strong> untuk
+   183→              video MP4 lengkap dengan narasi, subtitle, dan efek suara. Tanpa kamera, tanpa langganan mahal.
+   184→            </p>
+   185→            <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+   186→              <Button asChild className="bg-amber-500 text-stone-950 hover:bg-amber-400">
+   187→                <a href="#studio">
+   188→                  <Wand2 className="mr-2 h-4 w-4" /> Coba Studio Director
+   189→                </a>
+   190→              </Button>
+   191→              <Button asChild variant="outline">
+   192→                <a href="#gaya">
+   193→                  Lihat 10 Gaya <ArrowDown className="ml-2 h-4 w-4" />
+   194→                </a>
+   195→              </Button>
+   196→            </div>
+   197→            <div className="mt-9 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+   198→              <span className="flex items-center gap-1.5">
+   199→                <ShieldCheck className="h-3.5 w-3.5 text-amber-500" /> 102/102 test runtime lulus
+   200→              </span>
+   201→              <span className="flex items-center gap-1.5">
+   202→                <CircleCheck className="h-3.5 w-3.5 text-amber-500" /> FFmpeg + renderer lokal siap
+   203→              </span>
+   204→              <span className="flex items-center gap-1.5">
+   205→                <Film className="h-3.5 w-3.5 text-amber-500" /> 6 gaya Director · 4 gaya Autopilot
+   206→              </span>
+   207→            </div>
+   208→          </div>
+   209→        </section>
+   210→
+   211→        {/* MODES */}
+   212→        <section className="mx-auto max-w-6xl px-4 py-14">
+   213→          <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">Dua mode, satu skill</h2>
+   214→          <p className="mx-auto mt-2 max-w-xl text-center text-sm text-muted-foreground">
+   215→            Pilih cara kerja yang pas: kendali penu di tangan Anda, atau serahkan seluruh perakitan ke runtime lokal.
+   216→          </p>
+   217→          <div className="mt-8 grid gap-4 md:grid-cols-2">
+   218→            <Card className="border-border/70">
+   219→              <CardContent className="p-6">
+   220→                <div className="flex items-center gap-3">
+   221→                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-500">
+   222→                    <Scissors className="h-5 w-5" />
+   223→                  </span>
+   224→                  <div>
+   225→                    <p className="text-xs uppercase tracking-widest text-amber-500">Mode A</p>
+   226→                    <h3 className="text-lg font-semibold">Director</h3>
+   227→                  </div>
+   228→                </div>
+   229→                <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+   230→                  <li>• Proposal cerita + storyboard per bagian (klip ±10 detik)</li>
+   231→                  <li>• Prompt video siap-tempel untuk Google Flow / alat sejenis</li>
+   232→                  <li>• Anda generate klip &amp; finalisasi di CapCut — kendali penuh</li>
+   233→                  <li>• Tanpa API key, cocok untuk Shorts 30 dtk s.d. video 3 menit</li>
+   234→                </ul>
+   235→              </CardContent>
+   236→            </Card>
+   237→            <Card className="border-border/70">
+   238→              <CardContent className="p-6">
+   239→                <div className="flex items-center gap-3">
+   240→                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-500">
+   241→                    <MonitorPlay className="h-5 w-5" />
+   242→                  </span>
+   243→                  <div>
+   244→                    <p className="text-xs uppercase tracking-widest text-amber-500">Mode B</p>
+   245→                    <h3 className="text-lg font-semibold">Autopilot</h3>
+   246→                  </div>
+   247→                </div>
+   248→                <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+   249→                  <li>• Dari satu permintaan → MP4 utuh yang bisa langsung diunggah</li>
+   250→                  <li>• Narasi TTS, subtitle semantik, ilustrasi, micro-animation, SFX</li>
+   251→                  <li>• Sampel ±20 detik dulu untuk disetujui sebelum produksi penuh</li>
+   252→                  <li>• Butuh layanan image generation &amp; TTS (dicek otomatis)</li>
+   253→                </ul>
+   254→              </CardContent>
+   255→            </Card>
+   256→          </div>
+   257→        </section>
+   258→
+   259→        {/* STYLE GALLERY */}
+   260→        <section id="gaya" className="border-y border-border/60 bg-stone-900/40 scroll-mt-14">
+   261→          <div className="mx-auto max-w-6xl px-4 py-14">
+   262→            <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">Pilih gaya visual</h2>
+   263→            <p className="mx-auto mt-2 max-w-xl text-center text-sm text-muted-foreground">
+   264→              Semua contoh di bawah adalah sampel asli dari repo. Klik <em>Pilih</em> pada gaya A1–A5 untuk memakainya
+   265→              di Studio Director.
+   266→            </p>
+   267→            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+   268→              {STYLES.map((s) => (
+   269→                <Card key={s.code} className="group overflow-hidden border-border/70 pt-0">
+   270→                  <div className="relative aspect-video overflow-hidden bg-stone-950">
+   271→                    <img
+   272→                      src={s.previews[0].src}
+   273→                      alt={`Contoh gaya ${s.code} — ${s.name}`}
+   274→                      loading="lazy"
+   275→                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+   276→                    />
+   277→                    <span className="absolute left-2 top-2 rounded-md bg-stone-950/80 px-2 py-0.5 text-xs font-bold text-amber-500 backdrop-blur">
+   278→                      {s.code}
+   279→                    </span>
+   280→                    <span className="absolute right-2 top-2 rounded-md bg-stone-950/80 px-2 py-0.5 text-[10px] uppercase tracking-wider text-stone-300 backdrop-blur">
+   281→                      Mode {s.mode}
+   282→                    </span>
+   283→                  </div>
+   284→                  <CardContent className="p-4">
+   285→                    <h3 className="text-sm font-semibold">{s.name}</h3>
+   286→                    <p className="mt-0.5 text-xs text-muted-foreground">{s.tagline}</p>
+   287→                    <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-muted-foreground">{s.desc}</p>
+   288→                    <div className="mt-3">
+   289→                      {s.selectable ? (
+   290→                        <Button
+   291→                          size="sm"
+   292→                          variant="outline"
+   293→                          className={
+   294→                            selectedStyle === s.code
+   295→                              ? "w-full border-amber-500 bg-amber-500 text-stone-950 hover:bg-amber-400"
+   296→                              : "w-full hover:border-amber-500/50 hover:text-amber-500"
+   297→                          }
+   298→                          onClick={() => pickStyle(s)}
+   299→                        >
+   300→                          {selectedStyle === s.code ? "✓ Dipilih untuk Studio" : "Pilih untuk Studio"}
+   301→                        </Button>
+   302→                      ) : (
+   303→                        <Badge variant="outline" className="w-full justify-center border-border text-muted-foreground">
+   304→                          Rute khusus — via percakapan
+   305→                        </Badge>
+   306→                      )}
+   307→                    </div>
+   308→                  </CardContent>
+   309→                </Card>
+   310→              ))}
+   311→            </div>
+   312→          </div>
+   313→        </section>
+   314→
+   315→        {/* DIRECTOR STUDIO */}
+   316→        <section id="studio" ref={studioRef} className="mx-auto max-w-6xl scroll-mt-14 px-4 py-14">
+   317→          <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">Studio Director — demo langsung</h2>
+   318→          <p className="mx-auto mt-2 max-w-2xl text-center text-sm text-muted-foreground">
+   319→            Ini simulasi <strong className="text-foreground">Tahap A (Proposal Sutradara)</strong> dari Mode A: struktur
+   320→            5 babak, narasi EN + terjemahan, beat berwaktu, dan perangkat visual per klip. Setelah proposal disetujui,
+   321→            Mode A lanjut ke prompt per klip di percakapan.
+   322→          </p>
+   323→
+   324→          <div className="mt-8 grid gap-6 lg:grid-cols-5">
+   325→            {/* FORM */}
+   326→            <Card className="lg:col-span-2 border-border/70">
+   327→              <CardContent className="space-y-5 p-6">
+   328→                <div className="space-y-2">
+   329→                  <Label htmlFor="topic">Topik / naskah / kebutuhan</Label>
+   330→                  <Textarea
+   331→                    id="topic"
+   332→                    placeholder="Contoh: Mengapa manusia prokrastinasi menurut sains — atau tempel artikel/naskah Anda di sini"
+   333→                    className="min-h-28 resize-y"
+   334→                    value={topic}
+   335→                    onChange={(e) => setTopic(e.target.value)}
+   336→                  />
+   337→                </div>
+   338→
+   339→                <div className="space-y-2">
+   340→                  <Label>Rasio aspek</Label>
+   341→                  <div className="grid grid-cols-2 gap-2">
+   342→                    {(["16:9", "9:16"] as const).map((r) => (
+   343→                      <button
+   344→                        key={r}
+   345→                        type="button"
+   346→                        onClick={() => setRatio(r)}
+   347→                        className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+   348→                          ratio === r
+   349→                            ? "border-amber-500 bg-amber-500/10 text-amber-500"
+   350→                            : "border-border text-muted-foreground hover:bg-accent"
+   351→                        }`}
+   352→                      >
+   353→                        {r === "16:9" ? "16:9 Horizontal" : "9:16 Vertikal"}
+   354→                      </button>
+   355→                    ))}
+   356→                  </div>
+   357→                </div>
+   358→
+   359→                <div className="grid grid-cols-2 gap-3">
+   360→                  <div className="space-y-2">
+   361→                    <Label>Durasi</Label>
+   362→                    <Select value={String(durationSeconds)} onValueChange={(v) => setDurationSeconds(Number(v))}>
+   363→                      <SelectTrigger className="w-full">
+   364→                        <SelectValue placeholder="Pilih durasi" />
+   365→                      </SelectTrigger>
+   366→                      <SelectContent>
+   367→                        {DURATIONS.map((d) => (
+   368→                          <SelectItem key={d.seconds} value={String(d.seconds)}>
+   369→                            {d.label} · {d.clips} klip
+   370→                          </SelectItem>
+   371→                        ))}
+   372→                      </SelectContent>
+   373→                    </Select>
+   374→                  </div>
+   375→                  <div className="space-y-2">
+   376→                    <Label>Gaya visual</Label>
+   377→                    <Select value={selectedStyle} onValueChange={setSelectedStyle}>
+   378→                      <SelectTrigger className="w-full">
+   379→                        <SelectValue placeholder="Pilih gaya" />
+   380→                      </SelectTrigger>
+   381→                      <SelectContent>
+   382→                        {SELECTABLE_STYLES.map((s) => (
+   383→                          <SelectItem key={s.code} value={s.code}>
+   384→                            {s.code} — {s.name}
+   385→                          </SelectItem>
+   386→                        ))}
+   387→                      </SelectContent>
+   388→                    </Select>
+   389→                  </div>
+   390→                </div>
+   391→
+   392→                <Button
+   393→                  onClick={generateProposal}
+   394→                  disabled={loading}
+   395→                  className="w-full bg-amber-500 text-stone-950 hover:bg-amber-400"
+   396→                >
+   397→                  {loading ? (
+   398→                    <>
+   399→                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Menyusun proposal…
+   400→                    </>
+   401→                  ) : (
+   402→                    <>
+   403→                      <Wand2 className="mr-2 h-4 w-4" /> Hasilkan Proposal Sutradara
+   404→                    </>
+   405→                  )}
+   406→                </Button>
+   407→                <p className="text-center text-[11px] text-muted-foreground">
+   408→                  {clipCount} klip × ±10 detik · narasi ±{clipCount * 22} kata
+   409→                </p>
+   410→
+   411→                {error && (
+   412→                  <Alert variant="destructive">
+   413→                    <CircleAlert className="h-4 w-4" />
+   414→                    <AlertTitle>Gagal</AlertTitle>
+   415→                    <AlertDescription>{error}</AlertDescription>
+   416→                  </Alert>
+   417→                )}
+   418→              </CardContent>
+   419→            </Card>
+   420→
+   421→            {/* RESULT */}
+   422→            <div className="lg:col-span-3">
+   423→              {loading && (
+   424→                <div className="space-y-4">
+   425→                  <Skeleton className="h-10 w-3/4" />
+   426→                  <Skeleton className="h-4 w-full" />
+   427→                  <Skeleton className="h-4 w-2/3" />
+   428→                  <div className="grid gap-3 sm:grid-cols-2">
+   429→                    {Array.from({ length: 4 }).map((_, i) => (
+   430→                      <Skeleton key={i} className="h-44 w-full" />
+   431→                    ))}
+   432→                  </div>
+   433→                </div>
+   434→              )}
+   435→
+   436→              {!loading && !proposal && (
+   437→                <div className="flex h-full min-h-72 flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center">
+   438→                  <Film className="h-10 w-10 text-muted-foreground/40" />
+   439→                  <p className="mt-3 text-sm font-medium">Proposal Anda akan muncul di sini</p>
+   440→                  <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+   441→                    Isi topik di kiri, tekan tombol, dan laporan sutradara lengkap disusun otomatis oleh AI.
+   442→                  </p>
+   443→                </div>
+   444→              )}
+   445→
+   446→              {!loading && proposal && (
+   447→                <div className="space-y-4">
+   448→                  <div>
+   449→                    <div className="flex flex-wrap items-center gap-2">
+   450→                      <Badge className="bg-amber-500 text-stone-950">Tahap A · Proposal</Badge>
+   451→                      <Badge variant="outline" className="border-border text-muted-foreground">
+   452→                        {proposal.styleCode} · {proposal.ratio} · {proposal.durationSeconds}s
+   453→                      </Badge>
+   454→                    </div>
+   455→                    <h3 className="mt-3 text-xl font-bold tracking-tight">{proposal.title}</h3>
+   456→                    <p className="mt-1 text-sm text-muted-foreground">{proposal.logline}</p>
+   457→                    <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+   458→                      <div className="flex items-start gap-2 rounded-lg border border-border/70 p-2.5">
+   459→                        <Mic className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+   460→                        <span className="text-muted-foreground">
+   461→                          <strong className="text-foreground">Suara:</strong> {proposal.voiceProfile}
+   462→                        </span>
+   463→                      </div>
+   464→                      <div className="flex items-start gap-2 rounded-lg border border-border/70 p-2.5">
+   465→                        <Music className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+   466→                        <span className="text-muted-foreground">
+   467→                          <strong className="text-foreground">BGM:</strong> {proposal.bgm}
+   468→                        </span>
+   469→                      </div>
+   470→                    </div>
+   471→                  </div>
+   472→
+   473→                  <div className="max-h-[32rem] space-y-3 overflow-y-auto pr-1 [scrollbar-width:thin]">
+   474→                    {proposal.clips.map((c) => (
+   475→                      <Card key={c.index} className="border-border/70">
+   476→                        <CardContent className="p-4">
+   477→                          <div className="flex flex-wrap items-center gap-2">
+   478→                            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-500 text-xs font-bold text-stone-950">
+   479→                              {c.index}
+   480→                            </span>
+   481→                            <Badge variant="outline" className="border-amber-500/40 text-[10px] uppercase tracking-wider text-amber-500">
+   482→                              {c.stage}
+   483→                            </Badge>
+   484→                            <span className="ml-auto font-mono text-xs text-muted-foreground">{c.time}</span>
+   485→                          </div>
+   486→
+   487→                          <p className="mt-3 text-sm leading-relaxed">
+   488→                            <Play className="mr-1.5 inline h-3 w-3 text-amber-500" />
+   489→                            {c.narrationEn}
+   490→                          </p>
+   491→                          <p className="mt-1 text-xs italic leading-relaxed text-muted-foreground">“{c.narrationId}”</p>
+   492→
+   493→                          <div className="mt-3 space-y-1.5">
+   494→                            {c.beats.map((b, i) => (
+   495→                              <div key={i} className="flex gap-2 text-xs">
+   496→                                <span className="shrink-0 font-mono text-amber-500/90">{b.slice(0, b.indexOf("]") + 1)}</span>
+   497→                                <span className="text-muted-foreground">{b.slice(b.indexOf("]") + 1).trim()}</span>
+   498→                              </div>
+   499→                            ))}
+   500→                          </div>
+   501→
+   502→                          <div className="mt-3 flex flex-wrap gap-1.5">
+   503→                            {c.devices.map((d, i) => (
+   504→                              <span key={i} className="rounded-md bg-stone-800/80 px-2 py-0.5 text-[10px] text-stone-300">
+   505→                                {d}
+   506→                              </span>
+   507→                            ))}
+   508→                          </div>
+   509→
+   510→                          {c.transition && (
+   511→                            <p className="mt-3 border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
+   512→                              <FileText className="mr-1 inline h-3 w-3" /> Transisi: {c.transition}
+   513→                            </p>
+   514→                          )}
+   515→                        </CardContent>
+   516→                      </Card>
+   517→                    ))}
+   518→                  </div>
+   519→
+   520→                  <Alert className="border-amber-500/40 bg-amber-500/[0.06]">
+   521→                    <ShieldCheck className="h-4 w-4 text-amber-500" />
+   522→                    <AlertTitle className="text-amber-500">Gerbang persetujuan</AlertTitle>
+   523→                    <AlertDescription className="text-xs leading-relaxed">
+   524→                      Ini laporan Tahap A. Jika sudah cocok, lanjutkan di percakapan:{" "}
+   525→                      <em>“Proposal ini disetujui, buat prompt video per klip (Tahap B).”</em> Ubah rasio, durasi, gaya,
+   526→                      atau struktur berarti proposal disusun ulang.
+   527→                    </AlertDescription>
+   528→                  </Alert>
+   529→                </div>
+   530→              )}
+   531→            </div>
+   532→          </div>
+   533→        </section>
+   534→
+   535→        {/* SYSTEM STATUS */}
+   536→        <section id="status" className="border-t border-border/60 bg-stone-900/40 scroll-mt-14">
+   537→          <div className="mx-auto max-w-6xl px-4 py-14">
+   538→            <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">Status instalasi runtime</h2>
+   539→            <p className="mx-auto mt-2 max-w-xl text-center text-sm text-muted-foreground">
+   540→              Hasil nyata perintah <code className="rounded bg-stone-800 px-1.5 py-0.5 text-xs">doctor</code> dari
+   541→              runtime Autopilot yang terpasang di server ini.
+   542→            </p>
+   543→            <div className="mx-auto mt-8 max-w-3xl space-y-3">
+   544→              {!status && (
+   545→                <div className="space-y-3">
+   546→                  <Skeleton className="h-14 w-full" />
+   547→                  <Skeleton className="h-14 w-full" />
+   548→                  <Skeleton className="h-14 w-full" />
+   549→                </div>
+   550→              )}
+   551→              {status && (
+   552→                <>
+   553→                  {status.doctor.map((c) => (
+   554→                    <div
+   555→                      key={c.label}
+   556→                      className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-background px-4 py-3"
+   557→                    >
+   558→                      <div className="flex items-center gap-3">
+   559→                        {c.ok ? (
+   560→                          <CircleCheck className="h-5 w-5 shrink-0 text-green-500" />
+   561→                        ) : (
+   562→                          <CircleAlert className="h-5 w-5 shrink-0 text-red-500" />
+   563→                        )}
+   564→                        <span className="text-sm font-medium">{c.label}</span>
+   565→                      </div>
+   566→                      <Badge variant="outline" className={c.ok ? "border-green-500/40 text-green-500" : "border-red-500/40 text-red-500"}>
+   567→                        {c.detail}
+   568→                      </Badge>
+   569→                    </div>
+   570→                  ))}
+   571→                  <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-background px-4 py-3">
+   572→                    <div className="flex items-center gap-3">
+   573→                      {status.geminiKeyPresent ? (
+   574→                        <CircleCheck className="h-5 w-5 shrink-0 text-green-500" />
+   575→                      ) : (
+   576→                        <CircleAlert className="h-5 w-5 shrink-0 text-amber-500" />
+   577→                      )}
+   578→                      <span className="text-sm font-medium">Layanan image generation (Gemini)</span>
+   579→                    </div>
+   580→                    <Badge variant="outline" className={status.geminiKeyPresent ? "border-green-500/40 text-green-500" : "border-amber-500/40 text-amber-500"}>
+   581→                      {status.geminiKeyPresent ? "Key terdeteksi" : "Belum dikonfigurasi"}
+   582→                    </Badge>
+   583→                  </div>
+   584→                  <p className="px-1 text-xs leading-relaxed text-muted-foreground">
+   585→                    {status.note} Mode A (Director) tidak memerlukan key apa pun. Runtime skill terpasang di{" "}
+   586→                    <code className="rounded bg-stone-800 px-1.5 py-0.5">{status.skillPath}</code> ·{" "}
+   587→                    {status.testsRunAtInstall.passed}/{status.testsRunAtInstall.total} test lulus saat instalasi.
+   588→                  </p>
+   589→                </>
+   590→              )}
+   591→            </div>
+   592→          </div>
+   593→        </section>
+   594→      </main>
+   595→
+   596→      {/* FOOTER — sticky bottom */}
+   597→      <footer className="mt-auto border-t border-border/60">
+   598→        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-5 text-xs text-muted-foreground sm:flex-row">
+   599→          <p className="flex items-center gap-1.5">
+   600→            <Clapperboard className="h-3.5 w-3.5 text-amber-500" />
+   601→            Stickman Video Director · open source MIT
+   602→          </p>
+   603→          <a
+   604→            href="https://github.com/kaomei/stickman-video-director"
+   605→            target="_blank"
+   606→            rel="noreferrer"
+   607→            className="flex items-center gap-1.5 hover:text-foreground"
+   608→          >
+   609→            <Github className="h-3.5 w-3.5" /> kaomei/stickman-video-director
+   610→          </a>
+   611→        </div>
+   612→      </footer>
+   613→    </div>
+   614→  );
+   615→}
+   616→

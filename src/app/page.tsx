@@ -27,6 +27,11 @@ import {
   Scissors,
   FileText,
   Play,
+  Download,
+  Video,
+  RefreshCw,
+  Volume2,
+  Languages,
 } from "lucide-react";
 import { STYLES, SELECTABLE_STYLES, DURATIONS, type StickmanStyle } from "@/lib/stickman-styles";
 
@@ -53,6 +58,21 @@ type Proposal = {
   clips: ProposalClip[];
 };
 
+type ClipProd = {
+  index: number;
+  status: "pending" | "working" | "done" | "error";
+  illustration?: string;
+  audioDuration?: number;
+  error?: string;
+};
+
+type VideoResult = {
+  duration: number;
+  videoUrl: string;
+  posterUrl: string;
+  srtUrl: string;
+};
+
 type StatusPayload = {
   skillInstalled: boolean;
   skillPath: string;
@@ -73,6 +93,16 @@ export default function Home() {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const studioRef = useRef<HTMLDivElement>(null);
+
+  // Production (Tahap B) state
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [narrationLang, setNarrationLang] = useState<"id" | "en">("id");
+  const [voice, setVoice] = useState("tongtong");
+  const [prodPhase, setProdPhase] = useState<"idle" | "assets" | "render" | "done" | "error">("idle");
+  const [prodMessage, setProdMessage] = useState("");
+  const [prodError, setProdError] = useState<string | null>(null);
+  const [clipProd, setClipProd] = useState<ClipProd[]>([]);
+  const [videoResult, setVideoResult] = useState<VideoResult | null>(null);
 
   useEffect(() => {
     fetch("/api/system/status")
@@ -100,6 +130,12 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setProposal(null);
+    setJobId(null);
+    setProdPhase("idle");
+    setProdMessage("");
+    setProdError(null);
+    setClipProd([]);
+    setVideoResult(null);
     try {
       const res = await fetch("/api/director/proposal", {
         method: "POST",
@@ -126,6 +162,130 @@ export default function Home() {
   }
 
   const clipCount = Math.round(durationSeconds / 10);
+
+  async function generateClipAssets(id: string, clipIndex: number): Promise<boolean> {
+    try {
+      const res = await fetch("/api/production/clip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: id, index: clipIndex }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Gagal membuat aset klip.");
+      setClipProd((prev) =>
+        prev.map((p) =>
+          p.index === clipIndex
+            ? { ...p, status: "done", illustration: data.illustration, audioDuration: data.audioDuration }
+            : p
+        )
+      );
+      return true;
+    } catch (err) {
+      setClipProd((prev) =>
+        prev.map((p) =>
+          p.index === clipIndex
+            ? { ...p, status: "error", error: err instanceof Error ? err.message : "Gagal" }
+            : p
+        )
+      );
+      setProdError(err instanceof Error ? err.message : "Gagal membuat aset klip.");
+      return false;
+    }
+  }
+
+  async function runAssetLoop(id: string, skipDone = false): Promise<boolean> {
+    if (!proposal) return false;
+    const skipSet = new Set<number>();
+    if (skipDone) {
+      try {
+        const st = await fetch(`/api/production/status/${id}`).then((r) => r.json());
+        const done = st.progress?.clips ?? {};
+        for (const key of Object.keys(done)) {
+          if (done[key]?.audio && done[key]?.image) skipSet.add(Number(key));
+        }
+      } catch {
+        // kalau status gagal dibaca, regenerasi semua klip
+      }
+    }
+    for (let i = 0; i < proposal.clips.length; i++) {
+      const clipIndex = proposal.clips[i].index;
+      if (skipSet.has(clipIndex)) {
+        setClipProd((prev) => prev.map((p) => (p.index === clipIndex ? { ...p, status: "done" } : p)));
+        continue;
+      }
+      setClipProd((prev) =>
+        prev.map((p) => (p.index === clipIndex ? { ...p, status: "working", error: undefined } : p))
+      );
+      setProdMessage(`Klip ${i + 1}/${proposal.clips.length}: membuat ilustrasi & narasi…`);
+      const ok = await generateClipAssets(id, clipIndex);
+      if (!ok) {
+        setProdPhase("error");
+        return false;
+      }
+    }
+    return true;
+  }
+
+  async function renderVideo(id: string): Promise<boolean> {
+    setProdPhase("render");
+    setProdMessage("Merender video: efek kamera, subtitle terbakar, campur audio…");
+    try {
+      const res = await fetch("/api/production/render", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Render gagal.");
+      setVideoResult(data as VideoResult);
+      setProdPhase("done");
+      setProdMessage("");
+      return true;
+    } catch (err) {
+      setProdError(err instanceof Error ? err.message : "Render gagal.");
+      setProdPhase("error");
+      return false;
+    }
+  }
+
+  async function produceVideo() {
+    if (!proposal) return;
+    setError(null);
+    setProdError(null);
+    setVideoResult(null);
+    setProdPhase("assets");
+    setProdMessage("Menyiapkan job produksi…");
+    setClipProd(proposal.clips.map((c) => ({ index: c.index, status: "pending" as const })));
+    try {
+      const res = await fetch("/api/production/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proposal, narrationLang, voice }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Gagal memulai produksi.");
+      const id = data.jobId as string;
+      setJobId(id);
+      const ok = await runAssetLoop(id);
+      if (!ok) return;
+      await renderVideo(id);
+    } catch (err) {
+      setProdError(err instanceof Error ? err.message : "Produksi gagal.");
+      setProdPhase("error");
+    }
+  }
+
+  async function retryProduction() {
+    if (!jobId || !proposal) {
+      await produceVideo();
+      return;
+    }
+    setProdError(null);
+    setProdPhase("assets");
+    const ok = await runAssetLoop(jobId, true);
+    if (!ok) return;
+    await renderVideo(jobId);
+  }
 
   return (
     <div className="dark min-h-screen flex flex-col bg-background text-foreground">
@@ -178,14 +338,14 @@ export default function Home() {
               <span className="text-amber-500">video animasi stickman</span> yang siap unggah
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-pretty text-sm text-muted-foreground sm:text-base">
-              Dua mode dalam satu skill: <strong className="text-foreground">Director</strong> untuk
-              storyboard &amp; prompt per adegan, dan <strong className="text-foreground">Autopilot</strong> untuk
-              video MP4 lengkap dengan narasi, subtitle, dan efek suara. Tanpa kamera, tanpa langganan mahal.
+              Sekarang <strong className="text-foreground">semuanya jalan langsung di halaman ini</strong>: susun
+              proposal, setujui, dan server merender video MP4 utuh — ilustrasi AI per klip, narasi suara TTS,
+              subtitle terbakar, dan efek kamera. Tanpa kamera, tanpa langganan mahal, tanpa pindah aplikasi.
             </p>
             <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
               <Button asChild className="bg-amber-500 text-stone-950 hover:bg-amber-400">
                 <a href="#studio">
-                  <Wand2 className="mr-2 h-4 w-4" /> Coba Studio Director
+                  <Video className="mr-2 h-4 w-4" /> Buat Video Sekarang
                 </a>
               </Button>
               <Button asChild variant="outline">
@@ -228,9 +388,9 @@ export default function Home() {
                 </div>
                 <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
                   <li>• Proposal cerita + storyboard per bagian (klip ±10 detik)</li>
-                  <li>• Prompt video siap-tempel untuk Google Flow / alat sejenis</li>
-                  <li>• Anda generate klip &amp; finalisasi di CapCut — kendali penuh</li>
-                  <li>• Tanpa API key, cocok untuk Shorts 30 dtk s.d. video 3 menit</li>
+                  <li>• Struktur 5 babak Heartbeat Engine + perangkat visual per klip</li>
+                  <li>• Di studio ini: proposal langsung diproduksi jadi MP4 — klik sekali, video jadi</li>
+                  <li>• Tanpa API key, cocok untuk Shorts 30 dtk s.d. video 2 menit</li>
                 </ul>
               </CardContent>
             </Card>
@@ -246,10 +406,10 @@ export default function Home() {
                   </div>
                 </div>
                 <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-                  <li>• Dari satu permintaan → MP4 utuh yang bisa langsung diunggah</li>
-                  <li>• Narasi TTS, subtitle semantik, ilustrasi, micro-animation, SFX</li>
-                  <li>• Sampel ±20 detik dulu untuk disetujui sebelum produksi penuh</li>
-                  <li>• Butuh layanan image generation &amp; TTS (dicek otomatis)</li>
+                  <li>• Dari proposal yang disetujui → MP4 utuh yang bisa langsung diunggah</li>
+                  <li>• Narasi TTS 7 pilihan suara, subtitle terbakar, ilustrasi AI per klip</li>
+                  <li>• Efek kamera Ken Burns + fade otomatis saat merender di server ini</li>
+                  <li>• Image generation &amp; TTS sudah tersedia bawaan — tanpa API key</li>
                 </ul>
               </CardContent>
             </Card>
@@ -314,11 +474,11 @@ export default function Home() {
 
         {/* DIRECTOR STUDIO */}
         <section id="studio" ref={studioRef} className="mx-auto max-w-6xl scroll-mt-14 px-4 py-14">
-          <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">Studio Director — demo langsung</h2>
+          <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">Studio Video — buat langsung di sini</h2>
           <p className="mx-auto mt-2 max-w-2xl text-center text-sm text-muted-foreground">
-            Ini simulasi <strong className="text-foreground">Tahap A (Proposal Sutradara)</strong> dari Mode A: struktur
-            5 babak, narasi EN + terjemahan, beat berwaktu, dan perangkat visual per klip. Setelah proposal disetujui,
-            Mode A lanjut ke prompt per klip di percakapan.
+            <strong className="text-foreground">Tahap A:</strong> AI menyusun proposal sutradara (5 babak Heartbeat Engine,
+            narasi EN + ID, beat berwaktu, perangkat visual). <strong className="text-foreground">Tahap B:</strong> setujui
+            proposalnya dan server langsung merender MP4 utuh — ilustrasi AI, narasi suara, subtitle terbakar, efek kamera.
           </p>
 
           <div className="mt-8 grid gap-6 lg:grid-cols-5">
@@ -391,7 +551,7 @@ export default function Home() {
 
                 <Button
                   onClick={generateProposal}
-                  disabled={loading}
+                  disabled={loading || prodPhase === "assets" || prodPhase === "render"}
                   className="w-full bg-amber-500 text-stone-950 hover:bg-amber-400"
                 >
                   {loading ? (
@@ -517,15 +677,185 @@ export default function Home() {
                     ))}
                   </div>
 
-                  <Alert className="border-amber-500/40 bg-amber-500/[0.06]">
-                    <ShieldCheck className="h-4 w-4 text-amber-500" />
-                    <AlertTitle className="text-amber-500">Gerbang persetujuan</AlertTitle>
-                    <AlertDescription className="text-xs leading-relaxed">
-                      Ini laporan Tahap A. Jika sudah cocok, lanjutkan di percakapan:{" "}
-                      <em>“Proposal ini disetujui, buat prompt video per klip (Tahap B).”</em> Ubah rasio, durasi, gaya,
-                      atau struktur berarti proposal disusun ulang.
-                    </AlertDescription>
-                  </Alert>
+                  <Card className="border-amber-500/30 bg-amber-500/[0.04]">
+                    <CardContent className="space-y-4 p-5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className="bg-amber-500 text-stone-950">Tahap B · Produksi Video</Badge>
+                        {prodPhase === "idle" && (
+                          <Badge variant="outline" className="border-border text-muted-foreground">
+                            Menunggu persetujuan Anda
+                          </Badge>
+                        )}
+                        {prodPhase === "assets" && (
+                          <Badge variant="outline" className="border-amber-500/50 text-amber-500">
+                            Membuat aset klip…
+                          </Badge>
+                        )}
+                        {prodPhase === "render" && (
+                          <Badge variant="outline" className="border-amber-500/50 text-amber-500">
+                            Merender…
+                          </Badge>
+                        )}
+                        {prodPhase === "done" && (
+                          <Badge variant="outline" className="border-green-500/50 text-green-500">
+                            Video siap
+                          </Badge>
+                        )}
+                        {prodPhase === "error" && (
+                          <Badge variant="outline" className="border-red-500/50 text-red-500">
+                            Terhenti
+                          </Badge>
+                        )}
+                      </div>
+
+                      {prodPhase === "idle" && (
+                        <>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label className="flex items-center gap-1.5">
+                                <Languages className="h-3.5 w-3.5 text-amber-500" /> Bahasa narasi
+                              </Label>
+                              <Select value={narrationLang} onValueChange={(v) => setNarrationLang(v as "id" | "en")}>
+                                <SelectTrigger className="w-full">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="id">Bahasa Indonesia (terjemahan)</SelectItem>
+                                  <SelectItem value="en">English (naskah asli)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="flex items-center gap-1.5">
+                                <Volume2 className="h-3.5 w-3.5 text-amber-500" /> Suara narator
+                              </Label>
+                              <Select value={voice} onValueChange={setVoice}>
+                                <SelectTrigger className="w-full">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="tongtong">Tongtong — hangat &amp; ramah</SelectItem>
+                                  <SelectItem value="chuichui">Chuichui — ceria</SelectItem>
+                                  <SelectItem value="xiaochen">Xiaochen — kalem profesional</SelectItem>
+                                  <SelectItem value="jam">Jam — British</SelectItem>
+                                  <SelectItem value="kazi">Kazi — jelas &amp; standar</SelectItem>
+                                  <SelectItem value="douji">Douji — natural</SelectItem>
+                                  <SelectItem value="luodo">Luodo — ekspresif</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <Button
+                            onClick={produceVideo}
+                            className="w-full bg-amber-500 text-stone-950 hover:bg-amber-400"
+                          >
+                            <Video className="mr-2 h-4 w-4" /> Setuju &amp; Produksi Video ({proposal.clips.length} klip)
+                          </Button>
+                          <p className="text-center text-[11px] text-muted-foreground">
+                            Ilustrasi AI per klip + narasi TTS + render MP4 di server ini. Perkiraan ±1–3 menit —
+                            biarkan tab tetap terbuka.
+                          </p>
+                        </>
+                      )}
+
+                      {prodPhase !== "idle" && (
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {clipProd.map((p) => (
+                            <div
+                              key={p.index}
+                              className="flex items-center gap-3 rounded-lg border border-border/70 bg-background p-2.5"
+                            >
+                              <div className="relative h-12 w-20 shrink-0 overflow-hidden rounded-md bg-stone-900">
+                                {p.illustration ? (
+                                  <img
+                                    src={p.illustration}
+                                    alt={`Ilustrasi klip ${p.index}`}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-full items-center justify-center">
+                                    {p.status === "working" ? (
+                                      <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
+                                    ) : (
+                                      <Film className="h-4 w-4 text-muted-foreground/50" />
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium">Klip {p.index}</p>
+                                <p className="truncate text-[11px] text-muted-foreground">
+                                  {p.status === "pending" && "Menunggu"}
+                                  {p.status === "working" && "Ilustrasi + narasi dibuat…"}
+                                  {p.status === "done" && `Siap · narasi ${(p.audioDuration ?? 0).toFixed(1)} dtk`}
+                                  {p.status === "error" && (p.error ?? "Gagal")}
+                                </p>
+                              </div>
+                              {p.status === "done" && <CircleCheck className="h-4 w-4 shrink-0 text-green-500" />}
+                              {p.status === "error" && (
+                                <Button size="sm" variant="outline" onClick={retryProduction} className="h-7 shrink-0 px-2 text-[11px]">
+                                  <RefreshCw className="mr-1 h-3 w-3" /> Ulangi
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {prodMessage && prodPhase !== "done" && (
+                        <p className="flex items-center gap-2 text-xs text-amber-600">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> {prodMessage}
+                        </p>
+                      )}
+
+                      {prodError && (
+                        <Alert variant="destructive">
+                          <CircleAlert className="h-4 w-4" />
+                          <AlertTitle>Produksi terhenti</AlertTitle>
+                          <AlertDescription className="text-xs">
+                            {prodError} Klip yang sudah jadi tidak diulang — tekan Ulangi untuk melanjutkan.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      {prodPhase === "done" && videoResult && (
+                        <div className="space-y-3">
+                          <video
+                            key={videoResult.videoUrl}
+                            src={videoResult.videoUrl}
+                            poster={videoResult.posterUrl}
+                            controls
+                            className="w-full rounded-xl border border-border bg-black"
+                          />
+                          <div className="flex flex-wrap gap-2">
+                            <Button asChild size="sm" className="bg-amber-500 text-stone-950 hover:bg-amber-400">
+                              <a href={`${videoResult.videoUrl}?download=1`}>
+                                <Download className="mr-2 h-4 w-4" /> Unduh MP4 ({videoResult.duration.toFixed(0)} dtk)
+                              </a>
+                            </Button>
+                            <Button asChild size="sm" variant="outline">
+                              <a href={`${videoResult.srtUrl}?download=1`}>
+                                <FileText className="mr-2 h-4 w-4" /> Subtitle SRT
+                              </a>
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={produceVideo} disabled={prodPhase !== "done"}>
+                              <RefreshCw className="mr-2 h-4 w-4" /> Produksi Ulang
+                            </Button>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            Subtitle sudah dibakar ke dalam video; berkas SRT disediakan bila ingin menyunting di CapCut
+                            atau alat sejenis.
+                          </p>
+                        </div>
+                      )}
+
+                      {prodPhase === "error" && (
+                        <Button variant="outline" className="w-full" onClick={retryProduction}>
+                          <RefreshCw className="mr-2 h-4 w-4" /> Lanjutkan Produksi
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
               )}
             </div>
