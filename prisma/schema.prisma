@@ -30,3 +30,24 @@ model Post {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+/// Satu baris per job produksi (Mode A Director atau Mode B Autopilot).
+model Production {
+  id           String   @id @default(cuid())
+  jobId        String   @unique
+  mode         String // "A" (Director) | "B" (Autopilot)
+  title        String
+  topic        String?
+  ratio        String
+  styleCode    String
+  styleName    String?
+  voice        String
+  narrationLang String
+  status       String   @default("running") // running | done | error
+  stage        String   @default("assets") // assets | render | done | error
+  proposalJson String?
+  resultJson   String?
+  durationSec  Float?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

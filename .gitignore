@@ -62,3 +62,8 @@ running.lock
 # contoh keluaran lokal
 download/contoh-*
 download/*.html
+
+# database lokal
+/db/
+*.db
+*.db-journal

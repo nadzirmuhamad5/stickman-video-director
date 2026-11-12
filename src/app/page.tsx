@@ -33,6 +33,9 @@ import {
   Volume2,
   Languages,
   KeyRound,
+  Lightbulb,
+  History,
+  Zap,
 } from "lucide-react";
 import { STYLES, SELECTABLE_STYLES, DURATIONS, type StickmanStyle } from "@/lib/stickman-styles";
 import { TTS_VOICES, DEFAULT_VOICE } from "@/lib/tts-voices";
@@ -110,6 +113,36 @@ type StatusPayload = {
   testsRunAtInstall: { total: number; passed: number; failed: number };
 };
 
+type HistoryItem = {
+  jobId: string;
+  mode: "A" | "B";
+  title: string;
+  topic?: string | null;
+  ratio: string;
+  styleCode: string;
+  styleName?: string | null;
+  voice: string;
+  narrationLang: string;
+  status: string;
+  stage: string;
+  durationSec?: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type Idea = { title: string; hook: string; whyViral: string; opening: string };
+
+const IDEA_CATEGORIES = [
+  { id: "fakta-unik", label: "Fakta Unik" },
+  { id: "fakta-sejarah", label: "Fakta Sejarah" },
+  { id: "misteri", label: "Misteri" },
+  { id: "psikologi", label: "Psikologi" },
+  { id: "sains", label: "Sains" },
+  { id: "uang-bisnis", label: "Uang & Bisnis" },
+  { id: "teknologi", label: "Teknologi & AI" },
+  { id: "lifestyle", label: "Lifestyle & Tips" },
+];
+
 export default function Home() {
   const [selectedStyle, setSelectedStyle] = useState<string>("A1");
   const [topic, setTopic] = useState("");
@@ -120,6 +153,19 @@ export default function Home() {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const studioRef = useRef<HTMLDivElement>(null);
+
+  // Mode produksi: A = Director (review proposal dulu), B = Autopilot (langsung jadi)
+  const [mode, setMode] = useState<"A" | "B">("A");
+  const [styleB, setStyleB] = useState<"B1" | "B2">("B1");
+
+  // Generator ide viral
+  const [ideaCategory, setIdeaCategory] = useState("fakta-unik");
+  const [ideas, setIdeas] = useState<Idea[]>([]);
+  const [ideasLoading, setIdeasLoading] = useState(false);
+  const [ideasError, setIdeasError] = useState<string | null>(null);
+
+  // Riwayat produksi (persisten di database — tahan refresh)
+  const [history, setHistory] = useState<HistoryItem[]>([]);
 
   // Production (Tahap B) state
   const [jobId, setJobId] = useState<string | null>(null);
@@ -151,6 +197,10 @@ export default function Home() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setStatus(d))
       .catch(() => setStatus(null));
+    fetch("/api/productions")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setHistory(d?.productions ?? []))
+      .catch(() => setHistory([]));
     return () => stopPolling();
   }, []);
 
@@ -382,6 +432,7 @@ export default function Home() {
         setProdPhase("done");
         setProdMessage("");
         setProdPct(100);
+        void loadHistory();
         return;
       }
       if (p.stage === "error") {
@@ -409,6 +460,10 @@ export default function Home() {
   }
 
   async function produceVideo() {
+    if (mode === "B") {
+      await produceAutopilot();
+      return;
+    }
     if (!proposal) return;
     stopPolling();
     setError(null);
@@ -431,6 +486,121 @@ export default function Home() {
       await pollProduction(id);
     } catch (err) {
       setProdError(err instanceof Error ? err.message : "Produksi gagal.");
+      setProdPhase("error");
+    }
+  }
+
+  async function produceAutopilot() {
+    if (!topic.trim()) {
+      setProdError("Tulis dulu topik atau tempel naskah Anda.");
+      setProdPhase("error");
+      return;
+    }
+    stopPolling();
+    setError(null);
+    setProdError(null);
+    setVideoResult(null);
+    setProposal(null);
+    setClipProd([]);
+    setProdPhase("assets");
+    setProdMessage("Menyiapkan produksi autopilot…");
+    setProdPct(0);
+    try {
+      const res = await fetch("/api/autopilot/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic,
+          ratio,
+          durationSeconds,
+          styleB,
+          narrationLang,
+          voice,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Gagal memulai autopilot.");
+      const id = data.jobId as string;
+      setJobId(id);
+      await pollProduction(id);
+    } catch (err) {
+      setProdError(err instanceof Error ? err.message : "Autopilot gagal.");
+      setProdPhase("error");
+    }
+  }
+
+  async function fetchIdeas() {
+    setIdeasLoading(true);
+    setIdeasError(null);
+    try {
+      const res = await fetch("/api/ideas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: ideaCategory }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Gagal mencari ide.");
+      setIdeas(data.ideas as Idea[]);
+    } catch (err) {
+      setIdeasError(err instanceof Error ? err.message : "Gagal mencari ide.");
+      setIdeas([]);
+    } finally {
+      setIdeasLoading(false);
+    }
+  }
+
+  function applyIdea(idea: Idea) {
+    setTopic(`${idea.title}. ${idea.hook} ${idea.opening}`.trim());
+    studioRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function loadHistory() {
+    try {
+      const res = await fetch("/api/productions");
+      const d = res.ok ? await res.json() : null;
+      setHistory(d?.productions ?? []);
+    } catch {
+      // diam — riwayat cuma pelengkap
+    }
+  }
+
+  async function restoreProduction(item: HistoryItem) {
+    stopPolling();
+    setError(null);
+    setProdError(null);
+    setVideoResult(null);
+    setProdPct(0);
+    setMode(item.mode);
+    setJobId(item.jobId);
+    setProdPhase("assets");
+    setProdMessage("Memuat produksi dari riwayat…");
+    try {
+      const res = await fetch(`/api/productions/${item.jobId}`);
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error ?? "Gagal memuat produksi.");
+      if (item.mode === "A" && d.proposal) {
+        setProposal(d.proposal as Proposal);
+        setClipProd((d.proposal as Proposal).clips.map((c) => ({ index: c.index, status: "done" as const })));
+      } else {
+        setProposal(null);
+        setClipProd([]);
+      }
+      if (d.result && !d.result.error) {
+        setVideoResult(d.result as VideoResult);
+        setProdPhase("done");
+        setProdMessage("");
+      } else if (d.status === "error") {
+        setProdError(d.result?.error ?? "Produksi gagal sebelumnya.");
+        setProdPhase("error");
+      } else {
+        // masih berjalan di latar belakang (atau sempat terputus) — pantau lagi
+        setProdPhase("assets");
+        setProdMessage("Melanjutkan pemantauan produksi…");
+        await pollProduction(item.jobId);
+      }
+      studioRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (err) {
+      setProdError(err instanceof Error ? err.message : "Gagal memuat produksi.");
       setProdPhase("error");
     }
   }
@@ -459,6 +629,167 @@ export default function Home() {
       setProdPhase("error");
     }
   }
+
+  // Panel produksi bersama: dipakai Mode A (di bawah proposal) dan Mode B /
+  // restore riwayat (tanpa proposal).
+  const prodPanel = (
+    <Card className="border-amber-500/30 bg-amber-500/[0.04]">
+      <CardContent className="space-y-4 p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge className="bg-amber-500 text-stone-950">
+            {mode === "B" ? "Autopilot · Produksi Video" : "Tahap B · Produksi Video"}
+          </Badge>
+          {prodPhase === "idle" && (
+            <Badge variant="outline" className="border-border text-muted-foreground">
+              Menunggu persetujuan Anda
+            </Badge>
+          )}
+          {prodPhase === "assets" && (
+            <Badge variant="outline" className="border-amber-500/50 text-amber-500">
+              Menyiapkan…
+            </Badge>
+          )}
+          {prodPhase === "render" && (
+            <Badge variant="outline" className="border-amber-500/50 text-amber-500">
+              Merender…
+            </Badge>
+          )}
+          {prodPhase === "done" && (
+            <Badge variant="outline" className="border-green-500/50 text-green-500">
+              Video siap
+            </Badge>
+          )}
+          {prodPhase === "error" && (
+            <Badge variant="outline" className="border-red-500/50 text-red-500">
+              Terhenti
+            </Badge>
+          )}
+        </div>
+
+        {prodPhase === "idle" && mode === "A" && proposal && (
+          <>
+            <Button
+              onClick={produceVideo}
+              className="w-full bg-amber-500 text-stone-950 hover:bg-amber-400"
+            >
+              <Video className="mr-2 h-4 w-4" /> Setuju &amp; Produksi Video ({proposal.clips.length} klip)
+            </Button>
+            <p className="text-center text-[11px] text-muted-foreground">
+              Ilustrasi AI per klip + narasi suara pilihan + animasi canvas renderer di server ini. Perkiraan
+              ±1–4 menit — produksi berjalan di server, jadi aman walau tab di-refresh.
+            </p>
+          </>
+        )}
+
+        {prodPhase !== "idle" && mode === "A" && (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {clipProd.map((p) => (
+              <div
+                key={p.index}
+                className="flex items-center gap-3 rounded-lg border border-border/70 bg-background p-2.5"
+              >
+                <div className="relative h-12 w-20 shrink-0 overflow-hidden rounded-md bg-stone-900">
+                  {p.illustration ? (
+                    <img
+                      src={p.illustration}
+                      alt={`Ilustrasi klip ${p.index}`}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center">
+                      {p.status === "working" ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
+                      ) : (
+                        <Film className="h-4 w-4 text-muted-foreground/50" />
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium">Klip {p.index}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {p.status === "pending" && "Menunggu"}
+                    {p.status === "working" && "Ilustrasi + narasi dibuat…"}
+                    {p.status === "done" && `Siap · narasi ${(p.audioDuration ?? 0).toFixed(1)} dtk`}
+                    {p.status === "error" && (p.error ?? "Gagal")}
+                  </p>
+                </div>
+                {p.status === "done" && <CircleCheck className="h-4 w-4 shrink-0 text-green-500" />}
+                {p.status === "error" && (
+                  <Button size="sm" variant="outline" onClick={retryProduction} className="h-7 shrink-0 px-2 text-[11px]">
+                    <RefreshCw className="mr-1 h-3 w-3" /> Ulangi
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {prodMessage && prodPhase !== "done" && (
+          <div className="space-y-1.5">
+            <p className="flex items-center gap-2 text-xs text-amber-600">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> {prodMessage}
+            </p>
+            {prodPhase === "render" && (
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-800">
+                <div
+                  className="h-full rounded-full bg-amber-500 transition-all duration-500"
+                  style={{ width: `${Math.max(4, prodPct)}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {prodError && (
+          <Alert variant="destructive">
+            <CircleAlert className="h-4 w-4" />
+            <AlertTitle>Produksi terhenti</AlertTitle>
+            <AlertDescription className="text-xs">
+              {prodError} Aset yang sudah jadi tidak diulang — tekan Lanjutkan Produksi untuk meneruskan.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {prodPhase === "done" && videoResult && (
+          <div className="space-y-3">
+            <video
+              key={videoResult.videoUrl}
+              src={videoResult.videoUrl}
+              poster={videoResult.posterUrl}
+              controls
+              className="w-full rounded-xl border border-border bg-black"
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" className="bg-amber-500 text-stone-950 hover:bg-amber-400">
+                <a href={`${videoResult.videoUrl}?download=1`}>
+                  <Download className="mr-2 h-4 w-4" /> Unduh MP4 ({videoResult.duration.toFixed(0)} dtk)
+                </a>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <a href={`${videoResult.srtUrl}?download=1`}>
+                  <FileText className="mr-2 h-4 w-4" /> Subtitle SRT
+                </a>
+              </Button>
+              <Button size="sm" variant="outline" onClick={produceVideo} disabled={prodPhase !== "done"}>
+                <RefreshCw className="mr-2 h-4 w-4" /> Produksi Ulang
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Subtitle sudah dibakar ke dalam video; berkas SRT disediakan bila ingin menyunting di CapCut
+              atau alat sejenis. Hasil juga tersimpan di Riwayat Produksi.
+            </p>
+          </div>
+        )}
+
+        {prodPhase === "error" && (
+          <Button variant="outline" className="w-full" onClick={retryProduction}>
+            <RefreshCw className="mr-2 h-4 w-4" /> Lanjutkan Produksi
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="dark min-h-screen flex flex-col bg-background text-foreground">
@@ -579,10 +910,10 @@ export default function Home() {
                   </div>
                 </div>
                 <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-                  <li>• Dari proposal yang disetujui → MP4 utuh yang bisa langsung diunggah</li>
-                  <li>• Narasi TTS 7 pilihan suara, subtitle terbakar, ilustrasi AI per klip</li>
-                  <li>• Efek kamera Ken Burns + fade otomatis saat merender di server ini</li>
-                  <li>• Image generation &amp; TTS sudah tersedia bawaan — tanpa API key</li>
+                  <li>• Di studio ini: topik → video jadi dalam satu klik, tanpa review</li>
+                  <li>• Naskah + storyboard dibuat AI, dianimasikan canvas renderer (stickman bergerak, props krayon, SFX)</li>
+                  <li>• Narasi Edge Neural + subtitle semantik terbakar otomatis</li>
+                  <li>• Berjalan di server — hasil tersimpan di Riwayat Produksi</li>
                 </ul>
               </CardContent>
             </Card>
@@ -649,24 +980,114 @@ export default function Home() {
         <section id="studio" ref={studioRef} className="mx-auto max-w-6xl scroll-mt-14 px-4 py-14">
           <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">Studio Video — buat langsung di sini</h2>
           <p className="mx-auto mt-2 max-w-2xl text-center text-sm text-muted-foreground">
-            <strong className="text-foreground">Tahap A:</strong> AI menyusun proposal sutradara (5 babak Heartbeat Engine,
-            narasi EN + ID, beat berwaktu, perangkat visual). <strong className="text-foreground">Tahap B:</strong> setujui
-            proposalnya dan server langsung merender MP4 utuh — ilustrasi AI, narasi suara, subtitle terbakar, efek kamera.
+            <strong className="text-foreground">Mode A · Director:</strong> proposal sutradara dulu, review, lalu produksi —
+            ilustrasi AI per klip. <strong className="text-foreground">Mode B · Autopilot:</strong> satu klik dari topik
+            langsung jadi video animasi stickman. Semuanya dirender di server dengan canvas renderer — tab boleh ditutup.
           </p>
 
           <div className="mt-8 grid gap-6 lg:grid-cols-5">
             {/* FORM */}
             <Card className="lg:col-span-2 border-border/70">
               <CardContent className="space-y-5 p-6">
+                {/* Mode toggle */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMode("A")}
+                    className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                      mode === "A"
+                        ? "border-amber-500 bg-amber-500/10 text-amber-500"
+                        : "border-border text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    <span className="block text-sm font-semibold">A · Director</span>
+                    <span className="block text-[11px] opacity-80">review proposal dulu</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMode("B")}
+                    className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                      mode === "B"
+                        ? "border-amber-500 bg-amber-500/10 text-amber-500"
+                        : "border-border text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    <span className="block text-sm font-semibold">B · Autopilot</span>
+                    <span className="block text-[11px] opacity-80">topik → video, satu klik</span>
+                  </button>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="topic">Topik / naskah / kebutuhan</Label>
                   <Textarea
                     id="topic"
-                    placeholder="Contoh: Mengapa manusia prokrastinasi menurut sains — atau tempel artikel/naskah Anda di sini"
+                    placeholder={mode === "B" ? "Contoh: 3 fakta gila tentang mata uang kuno yang jadi kebiasaan hari ini" : "Contoh: Mengapa manusia prokrastinasi menurut sains — atau tempel artikel/naskah Anda di sini"}
                     className="min-h-28 resize-y"
                     value={topic}
                     onChange={(e) => setTopic(e.target.value)}
                   />
+                </div>
+
+                {/* Generator ide viral */}
+                <div className="rounded-xl border border-border/70 bg-stone-900/40 p-3.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="flex items-center gap-1.5 text-xs">
+                      <Lightbulb className="h-3.5 w-3.5 text-amber-500" /> Ide konten viral
+                    </Label>
+                    <Select value={ideaCategory} onValueChange={setIdeaCategory}>
+                      <SelectTrigger className="h-7 w-[150px] text-[11px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {IDEA_CATEGORIES.map((c) => (
+                          <SelectItem key={c.id} value={c.id} className="text-xs">
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={fetchIdeas}
+                    disabled={ideasLoading}
+                    className="mt-2.5 w-full h-8 text-xs"
+                  >
+                    {ideasLoading ? (
+                      <>
+                        <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> Mencari tren di internet…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="mr-1.5 h-3 w-3" /> Cari Ide Berpotensi Viral
+                      </>
+                    )}
+                  </Button>
+                  {ideasError && <p className="mt-2 text-[11px] text-red-500">{ideasError}</p>}
+                  {ideas.length > 0 && (
+                    <div className="mt-2.5 space-y-2">
+                      {ideas.map((idea, i) => (
+                        <div key={i} className="rounded-lg border border-border/60 bg-background p-2.5">
+                          <p className="text-xs font-semibold leading-snug">{idea.title}</p>
+                          <p className="mt-1 text-[11px] italic leading-snug text-muted-foreground">“{idea.hook}”</p>
+                          <p className="mt-1 text-[10px] leading-snug text-muted-foreground/80">
+                            Kenapa viral: {idea.whyViral}
+                          </p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => applyIdea(idea)}
+                            className="mt-1.5 h-6 px-2 text-[10px]"
+                          >
+                            Pakai ide ini
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -699,46 +1120,161 @@ export default function Home() {
                       <SelectContent>
                         {DURATIONS.map((d) => (
                           <SelectItem key={d.seconds} value={String(d.seconds)}>
-                            {d.label} · {d.clips} klip
+                            {mode === "A" ? `${d.label} · ${d.clips} klip` : d.label}
                           </SelectItem>
                         ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {mode === "A" ? (
+                    <div className="space-y-2">
+                      <Label>Gaya visual</Label>
+                      <Select value={selectedStyle} onValueChange={setSelectedStyle}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Pilih gaya" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SELECTABLE_STYLES.map((s) => (
+                            <SelectItem key={s.code} value={s.code}>
+                              {s.code} — {s.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label>Gaya Autopilot</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {([
+                          ["B1", "Line Art"],
+                          ["B2", "Berwarna"],
+                        ] as const).map(([code, label]) => (
+                          <button
+                            key={code}
+                            type="button"
+                            onClick={() => setStyleB(code)}
+                            className={`rounded-lg border px-2 py-2 text-xs font-medium transition-colors ${
+                              styleB === code
+                                ? "border-amber-500 bg-amber-500/10 text-amber-500"
+                                : "border-border text-muted-foreground hover:bg-accent"
+                            }`}
+                          >
+                            {code} · {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bahasa + suara narasi */}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1.5">
+                      <Languages className="h-3.5 w-3.5 text-amber-500" /> Bahasa narasi
+                    </Label>
+                    <Select value={narrationLang} onValueChange={(v) => changeNarrationLang(v as "id" | "en")}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="id">Bahasa Indonesia</SelectItem>
+                        <SelectItem value="en">English</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Gaya visual</Label>
-                    <Select value={selectedStyle} onValueChange={setSelectedStyle}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Pilih gaya" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {SELECTABLE_STYLES.map((s) => (
-                          <SelectItem key={s.code} value={s.code}>
-                            {s.code} — {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label className="flex items-center gap-1.5">
+                      <Volume2 className="h-3.5 w-3.5 text-amber-500" /> Suara narator
+                    </Label>
+                    <div className="flex gap-2">
+                      <Select value={voice} onValueChange={setVoice}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectLabel className="text-amber-500">Edge Neural · terbaik</SelectLabel>
+                            {EDGE_VOICES.map((v) => (
+                              <SelectItem key={v.id} value={v.id}>
+                                {v.label} · {v.gender}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                          <SelectGroup>
+                            <SelectLabel className="text-muted-foreground">ZAI bawaan · cadangan</SelectLabel>
+                            {ZAI_VOICES.map((v) => (
+                              <SelectItem key={v.id} value={v.id}>
+                                {v.label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={previewVoice}
+                        className="h-9 shrink-0 px-2.5"
+                        title="Dengar contoh suara"
+                      >
+                        {previewing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
-                <Button
-                  onClick={generateProposal}
-                  disabled={loading || prodPhase === "assets" || prodPhase === "render"}
-                  className="w-full bg-amber-500 text-stone-950 hover:bg-amber-400"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Menyusun proposal…
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 className="mr-2 h-4 w-4" /> Hasilkan Proposal Sutradara
-                    </>
-                  )}
-                </Button>
-                <p className="text-center text-[11px] text-muted-foreground">
-                  {clipCount} klip × ±10 detik · narasi ±{clipCount * 22} kata
+                {mode === "A" ? (
+                  <>
+                    <Button
+                      onClick={generateProposal}
+                      disabled={loading || prodPhase === "assets" || prodPhase === "render"}
+                      className="w-full bg-amber-500 text-stone-950 hover:bg-amber-400"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Menyusun proposal…
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="mr-2 h-4 w-4" /> Hasilkan Proposal Sutradara
+                        </>
+                      )}
+                    </Button>
+                    <p className="text-center text-[11px] text-muted-foreground">
+                      {clipCount} klip × ±10 detik · narasi ±{clipCount * 22} kata
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      onClick={produceVideo}
+                      disabled={prodPhase === "assets" || prodPhase === "render"}
+                      className="w-full bg-amber-500 text-stone-950 hover:bg-amber-400"
+                    >
+                      {prodPhase === "assets" || prodPhase === "render" ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Autopilot sedang bekerja…
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="mr-2 h-4 w-4" /> Buat Video Langsung (Satu Klik)
+                        </>
+                      )}
+                    </Button>
+                    <p className="text-center text-[11px] text-muted-foreground">
+                      Naskah, narasi TTS, animasi canvas, subtitle — semuanya otomatis di server.
+                    </p>
+                  </>
+                )}
+
+                <p className="flex items-center justify-center gap-1.5 text-center text-[11px] text-muted-foreground">
+                  <Sparkles className="h-3 w-3 text-amber-500" />
+                  {status?.geminiKeyPresent
+                    ? "Mesin naskah: Gemini aktif (key terpasang)"
+                    : "Mesin naskah: ZAI bawaan — pasang key Gemini di panel Status untuk kualitas terbaik"}
                 </p>
 
                 {error && (
@@ -850,226 +1386,73 @@ export default function Home() {
                     ))}
                   </div>
 
-                  <Card className="border-amber-500/30 bg-amber-500/[0.04]">
-                    <CardContent className="space-y-4 p-5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge className="bg-amber-500 text-stone-950">Tahap B · Produksi Video</Badge>
-                        {prodPhase === "idle" && (
-                          <Badge variant="outline" className="border-border text-muted-foreground">
-                            Menunggu persetujuan Anda
-                          </Badge>
-                        )}
-                        {prodPhase === "assets" && (
-                          <Badge variant="outline" className="border-amber-500/50 text-amber-500">
-                            Membuat aset klip…
-                          </Badge>
-                        )}
-                        {prodPhase === "render" && (
-                          <Badge variant="outline" className="border-amber-500/50 text-amber-500">
-                            Merender…
-                          </Badge>
-                        )}
-                        {prodPhase === "done" && (
-                          <Badge variant="outline" className="border-green-500/50 text-green-500">
-                            Video siap
-                          </Badge>
-                        )}
-                        {prodPhase === "error" && (
-                          <Badge variant="outline" className="border-red-500/50 text-red-500">
-                            Terhenti
-                          </Badge>
-                        )}
-                      </div>
-
-                      {prodPhase === "idle" && (
-                        <>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-2">
-                              <Label className="flex items-center gap-1.5">
-                                <Languages className="h-3.5 w-3.5 text-amber-500" /> Bahasa narasi
-                              </Label>
-                              <Select value={narrationLang} onValueChange={(v) => changeNarrationLang(v as "id" | "en")}>
-                                <SelectTrigger className="w-full">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="id">Bahasa Indonesia (terjemahan)</SelectItem>
-                                  <SelectItem value="en">English (naskah asli)</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <Label className="flex items-center gap-1.5">
-                                  <Volume2 className="h-3.5 w-3.5 text-amber-500" /> Suara narator
-                                </Label>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={previewVoice}
-                                  className="h-7 px-2 text-[11px]"
-                                  disabled={prodPhase !== "idle"}
-                                >
-                                  {previewing ? (
-                                    <>
-                                      <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Berhenti
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Play className="mr-1 h-3 w-3" /> Dengar contoh
-                                    </>
-                                  )}
-                                </Button>
-                              </div>
-                              <Select value={voice} onValueChange={setVoice}>
-                                <SelectTrigger className="w-full">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectGroup>
-                                    <SelectLabel className="text-amber-500">Edge Neural · kualitas terbaik</SelectLabel>
-                                    {EDGE_VOICES.map((v) => (
-                                      <SelectItem key={v.id} value={v.id}>
-                                        {v.label} · {v.gender} — {v.description}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectGroup>
-                                  <SelectGroup>
-                                    <SelectLabel className="text-muted-foreground">ZAI bawaan · cadangan</SelectLabel>
-                                    {ZAI_VOICES.map((v) => (
-                                      <SelectItem key={v.id} value={v.id}>
-                                        {v.label} — {v.description}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectGroup>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                          <Button
-                            onClick={produceVideo}
-                            className="w-full bg-amber-500 text-stone-950 hover:bg-amber-400"
-                          >
-                            <Video className="mr-2 h-4 w-4" /> Setuju &amp; Produksi Video ({proposal.clips.length} klip)
-                          </Button>
-                          <p className="text-center text-[11px] text-muted-foreground">
-                            Ilustrasi AI per klip + narasi suara Edge Neural + render MP4 di server ini. Perkiraan
-                            ±1–3 menit — produksi berjalan di server, jadi aman walau tab di-refresh.
-                          </p>
-                        </>
-                      )}
-
-                      {prodPhase !== "idle" && (
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {clipProd.map((p) => (
-                            <div
-                              key={p.index}
-                              className="flex items-center gap-3 rounded-lg border border-border/70 bg-background p-2.5"
-                            >
-                              <div className="relative h-12 w-20 shrink-0 overflow-hidden rounded-md bg-stone-900">
-                                {p.illustration ? (
-                                  <img
-                                    src={p.illustration}
-                                    alt={`Ilustrasi klip ${p.index}`}
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  <div className="flex h-full items-center justify-center">
-                                    {p.status === "working" ? (
-                                      <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
-                                    ) : (
-                                      <Film className="h-4 w-4 text-muted-foreground/50" />
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs font-medium">Klip {p.index}</p>
-                                <p className="truncate text-[11px] text-muted-foreground">
-                                  {p.status === "pending" && "Menunggu"}
-                                  {p.status === "working" && "Ilustrasi + narasi dibuat…"}
-                                  {p.status === "done" && `Siap · narasi ${(p.audioDuration ?? 0).toFixed(1)} dtk`}
-                                  {p.status === "error" && (p.error ?? "Gagal")}
-                                </p>
-                              </div>
-                              {p.status === "done" && <CircleCheck className="h-4 w-4 shrink-0 text-green-500" />}
-                              {p.status === "error" && (
-                                <Button size="sm" variant="outline" onClick={retryProduction} className="h-7 shrink-0 px-2 text-[11px]">
-                                  <RefreshCw className="mr-1 h-3 w-3" /> Ulangi
-                                </Button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {prodMessage && prodPhase !== "done" && (
-                        <div className="space-y-1.5">
-                          <p className="flex items-center gap-2 text-xs text-amber-600">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" /> {prodMessage}
-                          </p>
-                          {prodPhase === "render" && (
-                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-800">
-                              <div
-                                className="h-full rounded-full bg-amber-500 transition-all duration-500"
-                                style={{ width: `${Math.max(4, prodPct)}%` }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {prodError && (
-                        <Alert variant="destructive">
-                          <CircleAlert className="h-4 w-4" />
-                          <AlertTitle>Produksi terhenti</AlertTitle>
-                          <AlertDescription className="text-xs">
-                            {prodError} Klip yang sudah jadi tidak diulang — tekan Ulangi untuk melanjutkan.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
-                      {prodPhase === "done" && videoResult && (
-                        <div className="space-y-3">
-                          <video
-                            key={videoResult.videoUrl}
-                            src={videoResult.videoUrl}
-                            poster={videoResult.posterUrl}
-                            controls
-                            className="w-full rounded-xl border border-border bg-black"
-                          />
-                          <div className="flex flex-wrap gap-2">
-                            <Button asChild size="sm" className="bg-amber-500 text-stone-950 hover:bg-amber-400">
-                              <a href={`${videoResult.videoUrl}?download=1`}>
-                                <Download className="mr-2 h-4 w-4" /> Unduh MP4 ({videoResult.duration.toFixed(0)} dtk)
-                              </a>
-                            </Button>
-                            <Button asChild size="sm" variant="outline">
-                              <a href={`${videoResult.srtUrl}?download=1`}>
-                                <FileText className="mr-2 h-4 w-4" /> Subtitle SRT
-                              </a>
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={produceVideo} disabled={prodPhase !== "done"}>
-                              <RefreshCw className="mr-2 h-4 w-4" /> Produksi Ulang
-                            </Button>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground">
-                            Subtitle sudah dibakar ke dalam video; berkas SRT disediakan bila ingin menyunting di CapCut
-                            atau alat sejenis.
-                          </p>
-                        </div>
-                      )}
-
-                      {prodPhase === "error" && (
-                        <Button variant="outline" className="w-full" onClick={retryProduction}>
-                          <RefreshCw className="mr-2 h-4 w-4" /> Lanjutkan Produksi
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
+                  {prodPanel}
                 </div>
               )}
+
+              {/* Mode B / restore riwayat: panel produksi tanpa proposal */}
+              {!loading && !proposal && prodPhase !== "idle" && (
+                <div className="space-y-4">{prodPanel}</div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* HISTORY */}
+        <section id="riwayat" className="border-t border-border/60 scroll-mt-14">
+          <div className="mx-auto max-w-6xl px-4 py-14">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
+                  <History className="h-6 w-6 text-amber-500" /> Riwayat Produksi
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Tersimpan di database server — aman dari refresh browser. Klik untuk membuka kembali hasilnya.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={loadHistory}>
+                <RefreshCw className="mr-2 h-3.5 w-3.5" /> Segarkan
+              </Button>
+            </div>
+
+            <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {history.length === 0 && (
+                <div className="col-span-full flex flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center">
+                  <Film className="h-8 w-8 text-muted-foreground/40" />
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Belum ada produksi. Hasil video Anda akan muncul di sini setelah dibuat.
+                  </p>
+                </div>
+              )}
+              {history.map((h) => (
+                <button
+                  key={h.jobId}
+                  type="button"
+                  onClick={() => restoreProduction(h)}
+                  className="rounded-xl border border-border/70 bg-background p-4 text-left transition-colors hover:border-amber-500/50 hover:bg-accent"
+                >
+                  <div className="flex items-center gap-2">
+                    <Badge className={h.mode === "B" ? "bg-sky-500 text-stone-950" : "bg-amber-500 text-stone-950"}>
+                      {h.mode === "B" ? "Autopilot" : "Director"}
+                    </Badge>
+                    {h.status === "done" && (
+                      <Badge variant="outline" className="border-green-500/50 text-green-500">Selesai</Badge>
+                    )}
+                    {h.status === "running" && (
+                      <Badge variant="outline" className="border-amber-500/50 text-amber-500">Berjalan</Badge>
+                    )}
+                    {h.status === "error" && (
+                      <Badge variant="outline" className="border-red-500/50 text-red-500">Gagal</Badge>
+                    )}
+                  </div>
+                  <p className="mt-2 line-clamp-2 text-sm font-semibold">{h.title}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {h.styleCode} · {h.ratio}
+                    {h.durationSec ? ` · ${Math.round(h.durationSec)} dtk` : ""}
+                    {` · ${new Date(h.createdAt).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`}
+                  </p>
+                </button>
+              ))}
             </div>
           </div>
         </section>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import ZAI from "z-ai-web-dev-sdk";
+import { llmComplete, extractJson } from "@/lib/gemini";
 
 type ProposalClip = {
   index: number;
@@ -33,17 +33,6 @@ const STAGE_NAMES = [
   "Ultimate Truth Revelation",
   "Elevation & Discussion",
 ];
-
-function extractJson(raw: string): unknown {
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const candidate = fenced ? fenced[1] : raw;
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error("No JSON object found in model output");
-  }
-  return JSON.parse(candidate.slice(start, end + 1));
-}
 
 function coerceProposal(data: unknown, ctx: { styleCode: string; styleName: string; ratio: string; durationSeconds: number }): Proposal {
   const d = data as Record<string, unknown>;
@@ -101,9 +90,8 @@ export async function POST(request: NextRequest) {
   let lastError = "Unknown error";
 
   try {
-    const zai = await ZAI.create();
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      const outcome = await attemptProposal(zai, { styleCode, styleName, ratio, durationSeconds, topic, clipCount });
+      const outcome = await attemptProposal({ styleCode, styleName, ratio, durationSeconds, topic, clipCount });
       if (typeof outcome === "object") {
         return NextResponse.json({ proposal: outcome });
       }
@@ -121,13 +109,11 @@ export async function POST(request: NextRequest) {
 }
 
 async function attemptProposal(
-  zai: Awaited<ReturnType<typeof ZAI.create>>,
   ctx: { styleCode: string; styleName: string; ratio: string; durationSeconds: number; topic: string; clipCount: number }
 ): Promise<Proposal | string> {
   try {
-    const completion = await zai.chat.completions.create({
-      messages: [
-        {
+    const { content: raw } = await llmComplete([
+      {
           role: "assistant",
           content: `You are a professional stickman video director. Produce "Phase A" — a director's proposal for a ${ctx.durationSeconds}-second stickman animation composed of exactly ${ctx.clipCount} clips of ~10 seconds each (Gemini Omni Flash style).
 
@@ -150,14 +136,8 @@ Respond with ONLY a valid JSON object, no markdown fences, in this exact shape:
           role: "user",
           content: `Gaya visual: ${ctx.styleCode} — ${ctx.styleName}. Rasio aspek: ${ctx.ratio} (${ctx.ratio === "16:9" ? "action disebar kiri-tengah-kanan, tracking lateral" : "gunakan kedalaman, gerak vertikal, reveal bertumpuk"}). Durasi target: ${ctx.durationSeconds} detik = ${ctx.clipCount} klip.\n\nMateri sumber / topik:\n${ctx.topic}`,
         },
-      ],
-      thinking: { type: "disabled" },
-    });
+    ]);
 
-    const raw = completion.choices[0]?.message?.content ?? "";
-    if (!raw.trim()) {
-      return "Model tidak mengembalikan konten";
-    }
     const proposal = coerceProposal(extractJson(raw), {
       styleCode: ctx.styleCode,
       styleName: ctx.styleName,

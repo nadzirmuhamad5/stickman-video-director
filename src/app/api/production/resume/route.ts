@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import { jobIdValid, jobDir } from "@/lib/production";
+import { jobDir, jobIdValid } from "@/lib/production";
 import { isJobRunning, runProductionJob } from "@/lib/production-runner";
+import { runAutopilotJob } from "@/lib/autopilot-runner";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Resume an existing job: continues generating any missing clip assets, then
- * renders. Completed assets are reused, so this is cheap after an error or a
- * server restart.
+ * Resume an existing job (Mode A or B): continues generating any missing
+ * assets, then renders. Completed assets are reused, so this is cheap after
+ * an error or a server restart.
  */
 export async function POST(request: NextRequest) {
   let body: Record<string, unknown>;
@@ -28,6 +29,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, alreadyRunning: true });
   }
 
-  void runProductionJob(jobId);
+  const raw = JSON.parse(fs.readFileSync(path.join(jobDir(jobId), "job.json"), "utf8")) as { mode?: string };
+  if (raw.mode === "B") {
+    void runAutopilotJob(jobId);
+  } else {
+    void runProductionJob(jobId);
+  }
   return NextResponse.json({ ok: true, alreadyRunning: false });
 }
