@@ -81,3 +81,101 @@ export function extractJson(raw: string): unknown {
   }
   return JSON.parse(candidate.slice(start, end + 1));
 }
+
+// ---------------------------------------------------------------------------
+// Gemini image generation (B4 scene illustrations).
+//
+// Uses the native generateContent image endpoint so a drawing-style reference
+// image can be attached (required by the B4 style lock). Returns the first
+// inline image part, or null when no key is configured / every model fails.
+// ---------------------------------------------------------------------------
+
+const GEMINI_IMAGE_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+const GEMINI_IMAGE_MODELS = [
+  process.env.GEMINI_IMAGE_MODEL,
+  "gemini-2.5-flash-image",
+  "gemini-2.5-flash-image-preview",
+].filter(Boolean) as string[];
+
+export type GeminiImageInput = {
+  prompt: string;
+  /** PNG/JPEG bytes of a drawing-style reference attached before the prompt. */
+  refImage?: { bytes: Buffer; mime: string };
+  aspectRatio?: "1:1" | "16:9" | "9:16" | "4:3" | "3:2";
+  timeoutMs?: number;
+};
+
+export async function geminiImage(input: GeminiImageInput): Promise<Buffer | null> {
+  const stored = readGeminiKey();
+  if (!stored?.key) return null;
+  const parts: Record<string, unknown>[] = [];
+  if (input.refImage) {
+    parts.push({ inline_data: { mime_type: input.refImage.mime, data: input.refImage.bytes.toString("base64") } });
+  }
+  parts.push({ text: input.prompt });
+
+  let lastError = "unknown";
+  for (const model of GEMINI_IMAGE_MODELS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), input.timeoutMs ?? 120_000);
+    try {
+      const res = await fetch(`${GEMINI_IMAGE_BASE}/${model}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": stored.key },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts }],
+          generationConfig: {
+            responseModalities: ["TEXT", "IMAGE"],
+            ...(input.aspectRatio ? { imageConfig: { aspectRatio: input.aspectRatio } } : {}),
+          },
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        // An unsupported imageConfig is retried without it; other errors fall
+        // through to the next model in the list.
+        if (res.status === 400 && input.aspectRatio && /imageConfig|aspect/i.test(text)) {
+          const retry = await fetch(`${GEMINI_IMAGE_BASE}/${model}:generateContent`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-goog-api-key": stored.key },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts }],
+              generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+            }),
+          });
+          if (!retry.ok) throw new Error(`Gemini image HTTP ${retry.status}`);
+          const okData = (await retry.json()) as GeminiImageResponse;
+          const img = pickImage(okData);
+          if (img) return img;
+        }
+        throw new Error(`Gemini image HTTP ${res.status}: ${text.slice(0, 200)}`);
+      }
+      const data = (await res.json()) as GeminiImageResponse;
+      const img = pickImage(data);
+      if (img) return img;
+      throw new Error("Gemini image tidak mengembalikan gambar");
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      console.error(`[gemini-image] ${model} gagal: ${lastError}`);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  console.error(`[gemini-image] semua model gagal: ${lastError}`);
+  return null;
+}
+
+type GeminiImageResponse = {
+  candidates?: {
+    content?: { parts?: { inlineData?: { data?: string }; inline_data?: { data?: string } }[] };
+  }[];
+};
+
+function pickImage(data: GeminiImageResponse): Buffer | null {
+  for (const part of data.candidates?.[0]?.content?.parts ?? []) {
+    const inline = part.inlineData ?? part.inline_data;
+    if (inline?.data) return Buffer.from(inline.data, "base64");
+  }
+  return null;
+}

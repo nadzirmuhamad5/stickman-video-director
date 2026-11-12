@@ -49,6 +49,22 @@ export const TTS_VOICES: TtsVoice[] = [
     description: "English narrator, male — news-style clarity",
   },
   {
+    id: "en-US-BrianNeural",
+    engine: "edge",
+    lang: "en",
+    gender: "Pria",
+    label: "Brian (Edge)",
+    description: "Deep, sincere male narrator — default for B4 Thriller",
+  },
+  {
+    id: "en-US-AndrewNeural",
+    engine: "edge",
+    lang: "en",
+    gender: "Pria",
+    label: "Andrew (Edge)",
+    description: "Warm, confident male narrator — cinematic tone",
+  },
+  {
     id: "en-US-JennyNeural",
     engine: "edge",
     lang: "en",

@@ -156,7 +156,16 @@ export default function Home() {
 
   // Mode produksi: A = Director (review proposal dulu), B = Autopilot (langsung jadi)
   const [mode, setMode] = useState<"A" | "B">("A");
-  const [styleB, setStyleB] = useState<"B1" | "B2">("B1");
+  const [styleB, setStyleBRaw] = useState<"B1" | "B2" | "B3" | "B4">("B1");
+
+  // B4 (Thriller) butuh ilustrasi Gemini: default bahasa Inggris + Brian.
+  function setStyleB(code: "B1" | "B2" | "B3" | "B4") {
+    setStyleBRaw(code);
+    if (code === "B4") {
+      setNarrationLang("en");
+      setVoice("en-US-BrianNeural");
+    }
+  }
 
   // Generator ide viral
   const [ideaCategory, setIdeaCategory] = useState("fakta-unik");
@@ -1147,23 +1156,46 @@ export default function Home() {
                       <Label>Gaya Autopilot</Label>
                       <div className="grid grid-cols-2 gap-2">
                         {([
-                          ["B1", "Line Art"],
-                          ["B2", "Berwarna"],
-                        ] as const).map(([code, label]) => (
+                          ["B1", "Line Art", "Krayon putih, stickman + prop AI"],
+                          ["B2", "Berwarna", "Krayon hangat berwarna + prop AI"],
+                          ["B3", "Retro TV", "Gelap retrotv, siluet vektor"],
+                          ["B4", "Thriller", "Ilustrasi sinematik · butuh key"],
+                        ] as const).map(([code, label, desc]) => (
                           <button
                             key={code}
                             type="button"
                             onClick={() => setStyleB(code)}
-                            className={`rounded-lg border px-2 py-2 text-xs font-medium transition-colors ${
+                            className={`rounded-lg border px-2.5 py-2 text-left transition-colors ${
                               styleB === code
                                 ? "border-amber-500 bg-amber-500/10 text-amber-500"
                                 : "border-border text-muted-foreground hover:bg-accent"
                             }`}
                           >
-                            {code} · {label}
+                            <span className="block text-xs font-semibold">
+                              {code} · {label}
+                            </span>
+                            <span className="mt-0.5 block text-[10px] leading-tight opacity-80">
+                              {desc}
+                            </span>
                           </button>
                         ))}
                       </div>
+                      {styleB === "B4" && (
+                        <p className="text-[11px] text-muted-foreground">
+                          B4 memakai narator Brian (Edge) + ilustrasi Gemini per adegan —
+                          pasang Gemini API key di panel Status. Bahasa diubah ke English otomatis.
+                        </p>
+                      )}
+                      {(styleB === "B1" || styleB === "B2") && (
+                        <p className="text-[11px] text-muted-foreground">
+                          Setiap beat menggambar objek konkret dari narasi (prop AI) — bukan cuma stickman.
+                        </p>
+                      )}
+                      {styleB === "B3" && (
+                        <p className="text-[11px] text-muted-foreground">
+                          Panel objek &amp; diagram digambar vektor di bidang gelap, finishing televisi — tanpa API key.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

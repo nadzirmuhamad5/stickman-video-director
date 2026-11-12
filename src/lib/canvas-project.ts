@@ -21,7 +21,27 @@ import { jobDir } from "@/lib/production";
 export type CanvasCue = { start: number; end: number; text: string };
 
 type Layer = {
-  type: "image" | "pose" | "text" | "line" | "arrow" | "underline";
+  type:
+    | "image"
+    | "pose"
+    | "text"
+    | "line"
+    | "arrow"
+    | "underline"
+    | "group" // B3
+    | "path" // B3
+    | "rect" // B3
+    | "ellipse"; // B3
+  // B3-only artwork fields (validated by the renderer's validateB3):
+  children?: Layer[];
+  commands?: (string | number)[][];
+  radius?: number;
+  fill?: string;
+  stroke?: string;
+  pivotX?: number;
+  pivotY?: number;
+  scaleX?: number;
+  scaleY?: number;
   path?: string;
   pose?: number;
   text?: string;
@@ -39,22 +59,42 @@ type Layer = {
   angle?: number;
   from?: number;
   to?: number;
-  keys?: { t: number; x?: number; y?: number; w?: number; angle?: number; alpha?: number; progress?: number }[];
+  keys?: { t: number; x?: number; y?: number; w?: number; angle?: number; alpha?: number; progress?: number; scaleX?: number; scaleY?: number }[];
 };
 
 type Shot = { start: number; end: number; layers: Layer[] };
 
 type CanvasProject = {
   version: 1;
-  style: "B1" | "B2";
+  style: "B1" | "B2" | "B3" | "B4";
   width: number;
   height: number;
   fps: number;
-  grid?: boolean;
-  voice: { path: string; lead: number; tail: number; contains_sfx: false };
+  grid?: boolean; // B1 only
+  television?: { enabled?: boolean; intensity?: number }; // B3 only
+  voice: {
+    path: string;
+    lead: number;
+    tail: number;
+    contains_sfx: false;
+    /** B4 narrator identity (renderer contract): name/id must be present. */
+    name?: string;
+    id?: string;
+    user_override?: string;
+  };
   shots: Shot[];
   captions: CanvasCue[];
   sfx?: { time: number; kind: "tap" | "paper" | "pop" | "chime" | "jingle"; gain: number }[];
+  /** B4 subtle continuous bed — must cover [0, duration] (renderer gate). */
+  ambience?: {
+    path: string;
+    start: number;
+    end: number;
+    gain: number;
+    loop?: boolean;
+    fadeIn?: number;
+    fadeOut?: number;
+  }[];
 };
 
 export const CANVAS_FPS = 24;
@@ -333,26 +373,36 @@ export function buildClipCanvasProject(input: ClipCanvasInput): {
 export type AutopilotBeat = {
   label: string; // frasa pendek dari/ikut narasi scene
   pose: 0 | 1 | 2; // B1 pose atlas index
-  asset: string; // "@b1/<file>.png" or "none"
+  asset: string; // "@b1/<file>.png", "props/<n>.png", "scenes/<n>.png", or "none"
   accent: "underline" | "arrow" | "none";
+  /** objek konkret dari narasi untuk prop yang dihasilkan AI (B1/B2) */
+  prop?: string;
 };
 
 export type AutopilotScene = {
   narration: string;
   keyword: string;
-  asset: string; // "@b1/<file>.png" or "none"
+  asset: string; // "@b1/<file>.png", "props/<n>.png", "scenes/<n>.png", or "none"
   pose: number; // 0 | 1 | 2 (B1 pose atlas)
   overlay: "underline" | "arrow" | "none";
+  /** B4 only: where the scene happens, drives the style reference image. */
+  location?: "indoor" | "outdoor";
   beats: AutopilotBeat[];
 };
+
+export type StyleB = "B1" | "B2" | "B3" | "B4";
 
 export type AutopilotCanvasInput = {
   jobId: string;
   title: string;
   ratio: string;
-  styleB: "B1" | "B2";
+  styleB: StyleB;
   voiceDuration: number;
   scenes: AutopilotScene[];
+  /** B4 narrator identity (renderer contract — Brian or explicit override). */
+  voiceName?: string;
+  voiceId?: string;
+  voiceOverride?: string;
 };
 
 type Keys = NonNullable<Layer["keys"]>;
@@ -583,8 +633,12 @@ export function buildAutopilotProject(input: AutopilotCanvasInput): {
     planBeats(beats, span).forEach((b, bi) => {
       const fade = fadeFor(b.relStart, b.relEnd, b.isLast);
       const beatWin = b.relEnd - b.relStart;
+      // Props can be bundled @b1 assets or generated topic illustrations
+      // (props/pN.png produced by prop-art). "none" means no image.
       const propAsset =
-        b.beat.asset && b.beat.asset.startsWith("@b1/") ? b.beat.asset : null;
+        b.beat.asset && b.beat.asset !== "none" && /\.(png|jpe?g)$/i.test(b.beat.asset)
+          ? b.beat.asset
+          : null;
       const kwHasAsset = Boolean(propAsset);
 
       // Stickman: pose berubah tiap beat, bobbing sepanjang beat. Atlas pose
@@ -696,6 +750,569 @@ export function buildAutopilotProject(input: AutopilotCanvasInput): {
   const dir = path.join(jobDir(input.jobId), "canvas");
   fs.mkdirSync(dir, { recursive: true });
   const projectPath = path.join(dir, "project.json");
+  fs.writeFileSync(projectPath, JSON.stringify(project));
+  return { projectPath, duration, cues: captions };
+}
+
+// ------------------------------------------------ Mode B3: Retro TV (vektor) —
+
+// Palet Retro TV: bidang gelap, siluet putih/abu-abu, panel & diagram
+// progresif. Vektor murni — tidak butuh generator gambar atau API key.
+const B3_FG = "#e9eaea";
+const B3_MID = "#d0d2d4";
+const B3_DIM = "#9a9ea0";
+const B3_PANEL = "#171a1e";
+
+type B3Cmd = (string | number)[];
+
+/** Varian pose anggota tubuh (koordinat lokal anak grup). */
+const B3_ARM_POSES: [B3Cmd[], B3Cmd[]][] = [
+  [[["M", -2, 16], ["L", -52, 66]], [["M", 2, 16], ["L", 46, 58]]], // bicara
+  [[["M", -2, 16], ["L", -50, 62]], [["M", 2, 16], ["L", 84, -18]]], // menunjuk
+  [[["M", -2, 16], ["L", -60, 34]], [["M", 2, 16], ["L", 58, 70]]], // berjalan
+];
+const B3_LEG_POSES: [B3Cmd[], B3Cmd[]][] = [
+  [[["M", 0, 0], ["L", -34, 108]], [["M", 0, 0], ["L", 34, 108]]], // berdiri
+  [[["M", 0, 0], ["L", -30, 106]], [["M", 0, 0], ["L", 40, 100]]], // berdiri condong
+  [[["M", 0, 0], ["L", -52, 90]], [["M", 0, 0], ["L", 44, 104]]], // melangkah
+];
+
+function b3Path(cmds: B3Cmd[], y: number, lw = 4): Layer {
+  return { type: "path", x: 0, y, commands: cmds, stroke: B3_FG, fill: "none", lineWidth: lw };
+}
+
+/**
+ * Stickman B3: kepala lingkaran kosong + badan/lengan garis tunggal
+ * (orientasi lewat susunan tubuh, bukan wajah — konvensi B3). Grup diberi
+ * bobbing & sway halus sepanjang jendela beat, bukan pose beku.
+ */
+function b3Figure(
+  pose: number,
+  relStart: number,
+  relEnd: number,
+  span: number,
+  isLast: boolean,
+  scale: number,
+  baseX: number,
+  baseY: number
+): Layer {
+  const p = Math.max(0, Math.min(2, Math.round(pose)));
+  const [armL, armR] = B3_ARM_POSES[p];
+  const [legL, legR] = B3_LEG_POSES[p];
+  const fade = fadeFor(relStart, relEnd, isLast);
+  const keys: Keys = [
+    { t: round3(relStart), alpha: 0, y: baseY + 14 },
+    { t: round3(relStart + fade.inD), alpha: 1, y: baseY },
+  ];
+  let t = relStart + fade.inD + 0.9;
+  let i = 0;
+  const endT = Math.min(relEnd, span - 0.06);
+  while (t < endT - (fade.outD || 0) - 0.1) {
+    keys.push({ t: round3(t), y: baseY + (i % 2 === 0 ? -10 : 2), angle: i % 2 === 0 ? 0.015 : -0.015 });
+    t += 0.9;
+    i++;
+  }
+  if (fade.outD > 0) {
+    keys.push({ t: round3(relEnd - fade.outD), alpha: 1, y: baseY });
+    keys.push({ t: round3(Math.max(relEnd - 0.06, relEnd - fade.outD + 0.05)), alpha: 0, y: baseY + 14 });
+  }
+  return {
+    type: "group",
+    x: baseX,
+    y: baseY,
+    scaleX: scale,
+    scaleY: scale,
+    keys: normalizeKeys(keys, span),
+    children: [
+      { type: "ellipse", x: -30, y: -150, w: 60, h: 68, fill: "none", stroke: B3_FG, lineWidth: 4 },
+      b3Path([["M", 0, 0], ["L", 0, 120]], -86),
+      b3Path(armL, -70),
+      b3Path(armR, -70),
+      b3Path(legL, 34),
+      b3Path(legR, 34),
+    ],
+  };
+}
+
+/** Ukuran font label adaptif agar kata terpanjang tetap muat di panel. */
+function b3LabelSize(label: string, maxW: number, cap: number): number {
+  const longest = Math.max(4, ...label.split(/\s+/).map((w) => w.length));
+  return Math.max(26, Math.min(cap, Math.floor(maxW / (longest * 0.62))));
+}
+
+/** Panel objek per beat: komposisi vektor berotasi + label UPPERCASE. */
+function b3BeatPanel(
+  label: string,
+  variant: number,
+  relStart: number,
+  relEnd: number,
+  span: number,
+  isLast: boolean,
+  geo: { x: number; y: number; w: number; h: number }
+): Layer[] {
+  const fade = fadeFor(relStart, relEnd, isLast);
+  const inT = round3(relStart + 0.12);
+  const shown = round3(relStart + 0.12 + Math.max(0.2, fade.inD));
+  const outT1 = round3(relEnd - fade.outD);
+  const outT2 = round3(Math.max(relEnd - 0.06, relEnd - fade.outD + 0.05));
+  const enter: Keys = [
+    { t: inT, alpha: 0, y: geo.y + 16 },
+    { t: shown, alpha: 1, y: geo.y },
+  ];
+  if (!isLast) enter.push({ t: outT1, alpha: 1, y: geo.y }, { t: outT2, alpha: 0, y: geo.y + 10 });
+  const posKeys = normalizeKeys(enter, span);
+  const drawKeys = (delay: number): Keys =>
+    normalizeKeys(
+      [
+        { t: round3(relStart + delay), progress: 0 },
+        { t: round3(Math.min(relStart + delay + 0.9, relEnd - 0.1)), progress: 1 },
+        ...(isLast
+          ? []
+          : [
+              { t: outT1, alpha: 1, progress: 1 },
+              { t: outT2, alpha: 0, progress: 1 },
+            ]),
+      ],
+      span
+    );
+  const v = ((variant % 4) + 4) % 4;
+  const layers: Layer[] = [];
+  const inner = geo.w - 120;
+  const cx = geo.x + 60;
+  const cy = geo.y + 50;
+  if (v === 0) {
+    // kartu + lingkaran fokus
+    layers.push({
+      type: "rect", x: geo.x, y: geo.y, w: geo.w, h: geo.h, radius: 28,
+      fill: B3_PANEL, stroke: B3_DIM, lineWidth: 3, keys: posKeys,
+    });
+    layers.push({
+      type: "ellipse", x: cx, y: cy, w: inner, h: geo.h - 160,
+      fill: "none", stroke: B3_MID, lineWidth: 3, keys: posKeys,
+    });
+    layers.push({
+      type: "line", x: cx + 40, y: cy + (geo.h - 160) / 2, w: inner - 80, lineWidth: 4,
+      color: B3_MID, points: [[0, 0], [inner * 0.25, -10], [inner * 0.5, 8], [inner - 80, -6]],
+      keys: drawKeys(0.5),
+    });
+  } else if (v === 1) {
+    // diagram progresif: bingkai + dua garis
+    layers.push({
+      type: "rect", x: geo.x, y: geo.y, w: geo.w, h: geo.h, radius: 28,
+      fill: B3_PANEL, stroke: B3_DIM, lineWidth: 3, keys: posKeys,
+    });
+    layers.push({
+      type: "line", x: cx + 20, y: cy + 40, w: inner - 40, lineWidth: 5,
+      color: B3_FG, points: [[0, 0], [inner * 0.3, -12], [inner - 80, 0]],
+      keys: drawKeys(0.4),
+    });
+    layers.push({
+      type: "line", x: cx + 20, y: cy + 120, w: inner - 100, lineWidth: 4,
+      color: B3_MID, points: [[0, 0], [(inner - 100) * 0.4, 10], [inner - 140, -4]],
+      keys: drawKeys(0.9),
+    });
+    layers.push({
+      type: "underline", x: cx + 20, y: cy + 200, w: 220, lineWidth: 6,
+      color: B3_MID, keys: drawKeys(1.3),
+    });
+  } else if (v === 2) {
+    // layar bulat (TV) + garis sinyal
+    layers.push({
+      type: "ellipse", x: geo.x + 30, y: geo.y + 30, w: geo.w - 60, h: geo.h - 160,
+      fill: B3_PANEL, stroke: B3_DIM, lineWidth: 4, keys: posKeys,
+    });
+    layers.push({
+      type: "ellipse", x: geo.x + geo.w / 2 - 34, y: geo.y + geo.h / 2 - 110, w: 68, h: 68,
+      fill: "none", stroke: B3_FG, lineWidth: 4, keys: posKeys,
+    });
+    layers.push({
+      type: "line", x: cx, y: cy + (geo.h - 160) / 2 + 30, w: inner, lineWidth: 4,
+      color: B3_MID, points: [[0, 0], [inner * 0.35, -12], [inner * 0.65, 12], [inner, -6]],
+      keys: drawKeys(0.5),
+    });
+  } else {
+    // panel + panah menunjuk (sorotan)
+    layers.push({
+      type: "rect", x: geo.x, y: geo.y, w: geo.w, h: geo.h, radius: 28,
+      fill: B3_PANEL, stroke: B3_DIM, lineWidth: 3, keys: posKeys,
+    });
+    layers.push({
+      type: "arrow", x: cx + 30, y: cy + 60, w: inner - 60, color: B3_FG,
+      keys: drawKeys(0.4),
+    });
+    layers.push({
+      type: "underline", x: cx + 30, y: cy + 150, w: 260, lineWidth: 6,
+      color: B3_MID, keys: drawKeys(0.9),
+    });
+  }
+  // Label UPPERCASE di bawah panel — butuh key y sendiri (anchor di labelY).
+  const labelY = geo.y + geo.h + 26;
+  const labelKeys = normalizeKeys(
+    [
+      { t: inT, alpha: 0, y: labelY + 14 },
+      { t: shown, alpha: 1, y: labelY },
+      ...(isLast
+        ? []
+        : [
+            { t: outT1, alpha: 1, y: labelY },
+            { t: outT2, alpha: 0, y: labelY + 10 },
+          ]),
+    ],
+    span
+  );
+  const labelSize = b3LabelSize(label.toUpperCase(), geo.w - 60, 54);
+  layers.push({
+    type: "text", text: label.toUpperCase(), x: geo.x + 10, y: labelY,
+    w: geo.w - 20, size: labelSize, bold: true, color: B3_FG, keys: labelKeys,
+  });
+  return layers;
+}
+
+/**
+ * Build + write the B3 (Retro TV) autopilot project: bidang gelap, siluet
+ * putih/abu-abu vektor, panel objek berotasi per beat, finishing televisi.
+ * Tanpa generator gambar — semua elemen digambar renderer secara vektor.
+ */
+export function buildB3Project(input: AutopilotCanvasInput): {
+  projectPath: string;
+  duration: number;
+  cues: CanvasCue[];
+} {
+  const lead = 0.5;
+  const tail = 0.9;
+  const duration = input.voiceDuration + lead + tail;
+  const plane = planeFor(input.ratio);
+  const is916 = input.ratio === "9:16";
+
+  const weights = input.scenes.map((s) => Math.max(10, s.narration.length));
+  const weightSum = weights.reduce((a, b) => a + b, 0);
+  const usable = Math.max(1, duration - lead - tail);
+  const starts: number[] = [];
+  let acc = 0;
+  for (let i = 0; i < input.scenes.length; i++) {
+    starts.push(round3(acc));
+    acc += (weights[i] / weightSum) * usable;
+  }
+  const ends: number[] = input.scenes.map((_, i) =>
+    i === input.scenes.length - 1 ? round3(duration) : starts[i + 1]
+  );
+
+  const figScale = is916 ? 2.3 : 1.6;
+  const figX = is916 ? 150 : 120;
+  const figY = is916 ? plane.planeH * 0.5 : plane.planeH * 0.52;
+  const panelGeo = is916
+    ? { x: 640, y: plane.planeH * 0.16, w: 560, h: 420 }
+    : { x: 520, y: 70, w: 620, h: 430 };
+
+  const shots: Shot[] = [];
+  const captions: CanvasCue[] = [];
+  const sfx: NonNullable<CanvasProject["sfx"]> = [];
+
+  input.scenes.forEach((scene, i) => {
+    const shotStart = starts[i];
+    const shotEnd = ends[i];
+    const span = Math.max(0.8, shotEnd - shotStart);
+    const layers: Layer[] = [];
+
+    if (i === 0 && input.title && span >= 1.2) {
+      layers.push({
+        type: "text",
+        text: input.title.toUpperCase().slice(0, 80),
+        x: 90,
+        y: is916 ? plane.planeH * 0.07 : 50,
+        w: is916 ? 760 : 860,
+        size: is916 ? 64 : 58,
+        bold: true,
+        color: B3_FG,
+        keys: normalizeKeys(
+          [
+            { t: 0.2, alpha: 0, y: (is916 ? plane.planeH * 0.07 : 50) + 20 },
+            { t: 0.8, alpha: 1, y: is916 ? plane.planeH * 0.07 : 50 },
+            { t: Math.min(2.8, span - 0.7), alpha: 1 },
+            { t: Math.min(3.4, span - 0.15), alpha: 0 },
+          ],
+          span
+        ),
+      });
+      layers.push({
+        type: "underline",
+        x: 92,
+        y: (is916 ? plane.planeH * 0.07 : 50) + (is916 ? 150 : 130),
+        w: 300,
+        lineWidth: 6,
+        color: B3_MID,
+        keys: strokeKeys(0.3, Math.min(3.4, span - 0.15), 0.5, span, false),
+      });
+    }
+
+    const beats: AutopilotBeat[] = scene.beats.length
+      ? scene.beats
+      : [
+          {
+            label: (scene.keyword || scene.narration.split(" ").slice(0, 3).join(" ")).slice(0, 34),
+            pose: (Math.max(0, Math.min(2, Math.round(scene.pose))) as 0 | 1 | 2),
+            asset: "none",
+            accent: scene.overlay,
+          },
+        ];
+
+    planBeats(beats, span).forEach((b, bi) => {
+      layers.push(b3Figure(b.beat.pose, b.relStart, b.relEnd, span, b.isLast, figScale, figX, figY));
+      const label = (b.beat.label || scene.keyword).slice(0, 30);
+      if (label) {
+        layers.push(
+          ...b3BeatPanel(label, i * 2 + bi, b.relStart, b.relEnd, span, b.isLast, panelGeo)
+        );
+      }
+      sfx.push({ time: round2(shotStart + b.relStart + 0.14), kind: "pop", gain: 0.1 });
+    });
+
+    shots.push({ start: round3(shotStart), end: round3(shotEnd), layers });
+
+    const maxChars = is916 ? 40 : 46;
+    captions.push(
+      ...buildSingleLineCues(scene.narration, shotStart + (i === 0 ? lead : 0.15), shotEnd - 0.12, maxChars)
+    );
+  });
+
+  const project: CanvasProject = {
+    version: 1,
+    style: "B3",
+    width: plane.width,
+    height: plane.height,
+    fps: CANVAS_FPS,
+    television: { enabled: true, intensity: 0.45 },
+    voice: { path: "voice.wav", lead, tail, contains_sfx: false },
+    shots,
+    captions,
+    sfx,
+  };
+
+  const dir = path.join(jobDir(input.jobId), "canvas");
+  fs.mkdirSync(dir, { recursive: true });
+  const projectPath = path.join(dir, "project.json");
+  fs.writeFileSync(projectPath, JSON.stringify(project));
+  return { projectPath, duration, cues: captions };
+}
+
+// ---------------------------------------------- Mode B4: Survival Thriller —
+
+/** Dimensi PNG (IHDR) atau JPEG (SOF) — untuk box "cover" penuh frame. */
+function pngJpegSize(buf: Buffer): { w: number; h: number } | null {
+  try {
+    if (buf.length > 24 && buf[0] === 0x89 && buf[1] === 0x50) {
+      return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+    }
+    if (buf.length > 4 && buf[0] === 0xff && buf[1] === 0xd8) {
+      let off = 2;
+      while (off + 9 < buf.length) {
+        if (buf[off] !== 0xff) {
+          off++;
+          continue;
+        }
+        const marker = buf[off + 1];
+        if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) {
+          off += 2;
+          continue;
+        }
+        const len = buf.readUInt16BE(off + 2);
+        if (
+          marker >= 0xc0 &&
+          marker <= 0xcf &&
+          marker !== 0xc4 &&
+          marker !== 0xc8 &&
+          marker !== 0xcc
+        ) {
+          return { h: buf.readUInt16BE(off + 5), w: buf.readUInt16BE(off + 7) };
+        }
+        off += 2 + len;
+      }
+    }
+  } catch {
+    // jatuh ke fallback di bawah
+  }
+  return null;
+}
+
+const B4_MAX_SHOT = 2.9; // batas renderer 3.0s — beri margin aman
+
+type B4Chunk = { relStart: number; relEnd: number; beat: AutopilotBeat; isLast: boolean };
+
+/**
+ * Build + write the B4 (Survival Thriller) project: ilustrasi full-scene
+ * hasil Gemini (dengan style-lock reference) sebagai shot ≤3 detik, drift
+ * kamera halus, bed ambience gelap kontinu, narator Brian, caption warm-white.
+ */
+export function buildB4Project(input: AutopilotCanvasInput): {
+  projectPath: string;
+  duration: number;
+  cues: CanvasCue[];
+} {
+  const lead = 0.05; // B4: tanpa silent title pad (batas renderer 0.1s)
+  const tail = 0.7;
+  const duration = input.voiceDuration + lead + tail;
+  const plane = planeFor(input.ratio);
+  const is916 = input.ratio === "9:16";
+  const canvasDir = path.join(jobDir(input.jobId), "canvas");
+
+  // Span scene di atas SELURUH durasi (lead/tail menyatu ke scene pertama/
+  // terakhir) supaya shots tile [0..duration] tanpa gap.
+  const weights = input.scenes.map((s) => Math.max(10, s.narration.length));
+  const weightSum = weights.reduce((a, b) => a + b, 0);
+  const starts: number[] = [];
+  let acc = 0;
+  for (let i = 0; i < input.scenes.length; i++) {
+    starts.push(round3(acc));
+    acc += (weights[i] / weightSum) * duration;
+  }
+  const ends: number[] = input.scenes.map((_, i) =>
+    i === input.scenes.length - 1 ? round3(duration) : starts[i + 1]
+  );
+
+  const shots: Shot[] = [];
+  const captions: CanvasCue[] = [];
+
+  input.scenes.forEach((scene, i) => {
+    const sceneStart = starts[i];
+    const sceneEnd = ends[i];
+    const span = Math.max(0.8, sceneEnd - sceneStart);
+
+    const beats: AutopilotBeat[] = scene.beats.length
+      ? scene.beats
+      : [
+          {
+            label: scene.keyword.slice(0, 34) || scene.narration.slice(0, 30),
+            pose: 0,
+            asset: scene.asset,
+            accent: "none",
+          },
+        ];
+
+    // Beat → jendela → potongan ≤2.9s (shot naratif B4 maks 3 detik).
+    const chunks: B4Chunk[] = [];
+    planBeats(beats, span).forEach((w) => {
+      const n = Math.max(1, Math.ceil((w.relEnd - w.relStart) / B4_MAX_SHOT));
+      const step = (w.relEnd - w.relStart) / n;
+      for (let k = 0; k < n; k++) {
+        chunks.push({
+          relStart: round3(w.relStart + k * step),
+          relEnd: round3(k === n - 1 ? w.relEnd : w.relStart + (k + 1) * step),
+          beat: w.beat,
+          isLast: w.isLast && k === n - 1,
+        });
+      }
+    });
+
+    chunks.forEach((c, ci) => {
+      const shotStart = round3(sceneStart + c.relStart);
+      const shotEnd = round3(Math.min(sceneEnd, sceneStart + c.relEnd));
+      if (shotEnd - shotStart < 0.2) return;
+      const spanShot = shotEnd - shotStart;
+
+      // Box "cover": pasangkan aspek ilustrasi ke aspek bidang.
+      let ix = 0;
+      let iy = 0;
+      let iw = plane.planeW;
+      let ih = plane.planeH;
+      const assetAbs = path.resolve(canvasDir, c.beat.asset);
+      let dims: { w: number; h: number } | null = null;
+      try {
+        dims = pngJpegSize(fs.readFileSync(assetAbs));
+      } catch {
+        dims = null;
+      }
+      if (dims && dims.w > 0 && dims.h > 0) {
+        const scale = Math.max(plane.planeW / dims.w, plane.planeH / dims.h);
+        iw = dims.w * scale;
+        ih = dims.h * scale;
+        ix = (plane.planeW - iw) / 2;
+        iy = (plane.planeH - ih) / 2;
+      }
+
+      const inD = Math.min(0.22, spanShot * 0.3);
+      const outD = ci === chunks.length - 1 && i === input.scenes.length - 1 ? 0 : Math.min(0.22, spanShot * 0.3);
+      const keys: Keys = [{ t: 0, alpha: i === 0 && ci === 0 ? 0.4 : 0 }];
+      if (inD > 0.05) keys.push({ t: round3(inD), alpha: 1 });
+      else keys[0].alpha = 1;
+      // Drift kamera pelan: masuk dari posisi dasar, geser diagonal tipis.
+      const drift = Math.min(22, spanShot * 9);
+      for (let t = 0.8; t < spanShot - (outD || 0) - 0.1; t += 1.2) {
+        keys.push({
+          t: round3(t),
+          x: ix - (drift * (t / Math.max(1, spanShot))),
+          y: iy - drift * 0.6 * (t / Math.max(1, spanShot)),
+        });
+      }
+      keys.push({
+        t: round3(Math.max(0.3, spanShot - (outD || 0.15))),
+        x: ix - drift,
+        y: iy - drift * 0.6,
+        alpha: 1,
+      });
+      if (outD > 0) {
+        keys.push({ t: round3(spanShot - 0.05), alpha: 0, x: ix - drift, y: iy - drift * 0.6 });
+      }
+
+      shots.push({
+        start: shotStart,
+        end: shotEnd,
+        layers: [
+          {
+            type: "image",
+            path: c.beat.asset,
+            x: ix,
+            y: iy,
+            w: round2(iw),
+            h: round2(ih),
+            keys: normalizeKeys(keys, spanShot),
+          },
+        ],
+      });
+    });
+
+    const maxChars = is916 ? 40 : 46;
+    captions.push(
+      ...buildSingleLineCues(scene.narration, sceneStart + (i === 0 ? lead : 0.15), sceneEnd - 0.12, maxChars)
+    );
+  });
+
+  // Jaga ketetapan tile: perbaiki ujung pertama/terakhir.
+  if (shots.length) {
+    shots[0].start = 0;
+    shots[shots.length - 1].end = round3(duration);
+  }
+
+  const voice: CanvasProject["voice"] = { path: "voice.wav", lead, tail, contains_sfx: false };
+  if (input.voiceName && input.voiceId) {
+    voice.name = input.voiceName;
+    voice.id = input.voiceId;
+    if (input.voiceOverride) voice.user_override = input.voiceOverride;
+  }
+
+  const project: CanvasProject = {
+    version: 1,
+    style: "B4",
+    width: plane.width,
+    height: plane.height,
+    fps: CANVAS_FPS,
+    voice,
+    shots,
+    captions,
+    ambience: [
+      {
+        path: "ambience.wav",
+        start: 0,
+        end: round3(duration),
+        gain: 0.11,
+        loop: true,
+        fadeIn: 0,
+        fadeOut: 1.0,
+      },
+    ],
+  };
+
+  fs.mkdirSync(canvasDir, { recursive: true });
+  const projectPath = path.join(canvasDir, "project.json");
   fs.writeFileSync(projectPath, JSON.stringify(project));
   return { projectPath, duration, cues: captions };
 }
