@@ -9,6 +9,7 @@ import {
   type Proposal,
   type ProductionJob,
 } from "@/lib/production";
+import { runProductionJob } from "@/lib/production-runner";
 import { DEFAULT_VOICE, findVoice } from "@/lib/tts-voices";
 
 export const runtime = "nodejs";
@@ -49,6 +50,11 @@ export async function POST(request: NextRequest) {
   };
   fs.writeFileSync(path.join(dir, "job.json"), JSON.stringify(job));
   writeProgress(id, { stage: "assets", message: "Menyiapkan aset produksi…", clips: {} });
+
+  // Production runs entirely on the server in the background. The client only
+  // polls /api/production/status/[jobId], so refreshing or closing the tab
+  // does not abort the pipeline anymore.
+  void runProductionJob(id);
 
   return NextResponse.json({ jobId: id });
 }

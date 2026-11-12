@@ -82,6 +82,21 @@ type VideoResult = {
   srtUrl: string;
 };
 
+type ProductionStatus = {
+  jobId: string;
+  progress: {
+    stage: "assets" | "render" | "done" | "error";
+    message?: string;
+    clips: Record<string, { image?: boolean; audio?: boolean; audioDuration?: number; illustration?: string }>;
+    render?: { message: string; pct: number };
+    totalDuration?: number;
+    result?: VideoResult;
+    updatedAt: string;
+  };
+  done: boolean;
+  running: boolean;
+};
+
 type StatusPayload = {
   skillInstalled: boolean;
   skillPath: string;
@@ -117,12 +132,26 @@ export default function Home() {
   const [prodError, setProdError] = useState<string | null>(null);
   const [clipProd, setClipProd] = useState<ClipProd[]>([]);
   const [videoResult, setVideoResult] = useState<VideoResult | null>(null);
+  const [prodPct, setProdPct] = useState(0);
+
+  // Polling refs — produksi berjalan di server; client hanya memantau.
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollTokenRef = useRef(0);
+
+  function stopPolling() {
+    pollTokenRef.current += 1;
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }
 
   useEffect(() => {
     fetch("/api/system/status")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setStatus(d))
       .catch(() => setStatus(null));
+    return () => stopPolling();
   }, []);
 
   function pickStyle(style: StickmanStyle) {
@@ -268,11 +297,13 @@ export default function Home() {
     setError(null);
     setProposal(null);
     setJobId(null);
+    stopPolling();
     setProdPhase("idle");
     setProdMessage("");
     setProdError(null);
     setClipProd([]);
     setVideoResult(null);
+    setProdPct(0);
     try {
       const res = await fetch("/api/director/proposal", {
         method: "POST",
@@ -300,98 +331,92 @@ export default function Home() {
 
   const clipCount = Math.round(durationSeconds / 10);
 
-  async function generateClipAssets(id: string, clipIndex: number): Promise<boolean> {
-    try {
-      const res = await fetch("/api/production/clip", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId: id, index: clipIndex }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Gagal membuat aset klip.");
-      setClipProd((prev) =>
-        prev.map((p) =>
-          p.index === clipIndex
-            ? { ...p, status: "done", illustration: data.illustration, audioDuration: data.audioDuration }
-            : p
-        )
-      );
-      return true;
-    } catch (err) {
-      setClipProd((prev) =>
-        prev.map((p) =>
-          p.index === clipIndex
-            ? { ...p, status: "error", error: err instanceof Error ? err.message : "Gagal" }
-            : p
-        )
-      );
-      setProdError(err instanceof Error ? err.message : "Gagal membuat aset klip.");
-      return false;
-    }
-  }
-
-  async function runAssetLoop(id: string, skipDone = false): Promise<boolean> {
-    if (!proposal) return false;
-    const skipSet = new Set<number>();
-    if (skipDone) {
+  // ---------------------------------------------------------------------
+  // Produksi berjalan SEPENUHNYA di server (background). Client hanya
+  // polling status setiap 2 detik, sehingga menutup/refresh tab tidak
+  // menghentikan produksi lagi.
+  // ---------------------------------------------------------------------
+  async function pollProduction(id: string): Promise<void> {
+    const token = ++pollTokenRef.current;
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 2000));
+      if (pollTokenRef.current !== token) return;
+      let d: ProductionStatus | null = null;
       try {
-        const st = await fetch(`/api/production/status/${id}`).then((r) => r.json());
-        const done = st.progress?.clips ?? {};
-        for (const key of Object.keys(done)) {
-          if (done[key]?.audio && done[key]?.image) skipSet.add(Number(key));
-        }
+        const res = await fetch(`/api/production/status/${id}`);
+        d = res.ok ? ((await res.json()) as ProductionStatus) : null;
       } catch {
-        // kalau status gagal dibaca, regenerasi semua klip
+        d = null; // gangguan jaringan sesaat — teruskan polling
       }
-    }
-    for (let i = 0; i < proposal.clips.length; i++) {
-      const clipIndex = proposal.clips[i].index;
-      if (skipSet.has(clipIndex)) {
-        setClipProd((prev) => prev.map((p) => (p.index === clipIndex ? { ...p, status: "done" } : p)));
-        continue;
-      }
-      setClipProd((prev) =>
-        prev.map((p) => (p.index === clipIndex ? { ...p, status: "working", error: undefined } : p))
-      );
-      setProdMessage(`Klip ${i + 1}/${proposal.clips.length}: membuat ilustrasi & narasi…`);
-      const ok = await generateClipAssets(id, clipIndex);
-      if (!ok) {
-        setProdPhase("error");
-        return false;
-      }
-    }
-    return true;
-  }
+      if (pollTokenRef.current !== token) return;
+      if (!d) continue;
 
-  async function renderVideo(id: string): Promise<boolean> {
-    setProdPhase("render");
-    setProdMessage("Merender video: efek kamera, subtitle terbakar, campur audio…");
-    try {
-      const res = await fetch("/api/production/render", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId: id }),
+      const p = d.progress;
+      const clipsState = p.clips ?? {};
+      const order = proposal?.clips.map((c) => c.index) ??
+        Object.keys(clipsState).map(Number).sort((a, b) => a - b);
+
+      setClipProd((prev) => {
+        let firstUndoneMarked = false;
+        return order.map((index) => {
+          const st = clipsState[String(index)];
+          const complete = Boolean(st?.image && st?.audio);
+          let status: ClipProd["status"] = complete ? "done" : "pending";
+          if (!complete && (d?.running || p.stage === "render") && !firstUndoneMarked) {
+            status = "working";
+            firstUndoneMarked = true;
+          }
+          const prevClip = prev.find((c) => c.index === index);
+          return {
+            index,
+            status,
+            illustration: st?.illustration ?? prevClip?.illustration,
+            audioDuration: st?.audioDuration,
+            error: undefined,
+          };
+        });
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Render gagal.");
-      setVideoResult(data as VideoResult);
-      setProdPhase("done");
-      setProdMessage("");
-      return true;
-    } catch (err) {
-      setProdError(err instanceof Error ? err.message : "Render gagal.");
-      setProdPhase("error");
-      return false;
+
+      if (p.stage === "done" && p.result) {
+        setVideoResult(p.result);
+        setProdPhase("done");
+        setProdMessage("");
+        setProdPct(100);
+        return;
+      }
+      if (p.stage === "error") {
+        setProdError(p.message ?? "Produksi gagal.");
+        setProdPhase("error");
+        return;
+      }
+      if (!d.running && !p.result) {
+        // Server sempat restart sehingga job latar belakang hilang.
+        setProdError(
+          "Produksi terputus karena server restart. Aset yang sudah jadi tetap tersimpan — tekan Lanjutkan Produksi untuk meneruskan."
+        );
+        setProdPhase("error");
+        return;
+      }
+      if (p.stage === "render") {
+        setProdPhase("render");
+        setProdMessage(p.render?.message ?? "Merender video…");
+        setProdPct(p.render?.pct ?? 0);
+      } else {
+        setProdPhase("assets");
+        setProdMessage(p.message ?? "Menyiapkan aset produksi…");
+      }
     }
   }
 
   async function produceVideo() {
     if (!proposal) return;
+    stopPolling();
     setError(null);
     setProdError(null);
     setVideoResult(null);
     setProdPhase("assets");
     setProdMessage("Menyiapkan job produksi…");
+    setProdPct(0);
     setClipProd(proposal.clips.map((c) => ({ index: c.index, status: "pending" as const })));
     try {
       const res = await fetch("/api/production/start", {
@@ -403,9 +428,7 @@ export default function Home() {
       if (!res.ok) throw new Error(data.error ?? "Gagal memulai produksi.");
       const id = data.jobId as string;
       setJobId(id);
-      const ok = await runAssetLoop(id);
-      if (!ok) return;
-      await renderVideo(id);
+      await pollProduction(id);
     } catch (err) {
       setProdError(err instanceof Error ? err.message : "Produksi gagal.");
       setProdPhase("error");
@@ -413,15 +436,28 @@ export default function Home() {
   }
 
   async function retryProduction() {
-    if (!jobId || !proposal) {
+    if (!jobId) {
       await produceVideo();
       return;
     }
+    stopPolling();
     setProdError(null);
     setProdPhase("assets");
-    const ok = await runAssetLoop(jobId, true);
-    if (!ok) return;
-    await renderVideo(jobId);
+    setProdMessage("Melanjutkan produksi dari aset yang sudah ada…");
+    setProdPct(0);
+    try {
+      const res = await fetch("/api/production/resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Gagal melanjutkan produksi.");
+      await pollProduction(jobId);
+    } catch (err) {
+      setProdError(err instanceof Error ? err.message : "Produksi gagal.");
+      setProdPhase("error");
+    }
   }
 
   return (
@@ -919,7 +955,7 @@ export default function Home() {
                           </Button>
                           <p className="text-center text-[11px] text-muted-foreground">
                             Ilustrasi AI per klip + narasi suara Edge Neural + render MP4 di server ini. Perkiraan
-                            ±1–3 menit — biarkan tab tetap terbuka.
+                            ±1–3 menit — produksi berjalan di server, jadi aman walau tab di-refresh.
                           </p>
                         </>
                       )}
@@ -969,9 +1005,19 @@ export default function Home() {
                       )}
 
                       {prodMessage && prodPhase !== "done" && (
-                        <p className="flex items-center gap-2 text-xs text-amber-600">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> {prodMessage}
-                        </p>
+                        <div className="space-y-1.5">
+                          <p className="flex items-center gap-2 text-xs text-amber-600">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" /> {prodMessage}
+                          </p>
+                          {prodPhase === "render" && (
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-800">
+                              <div
+                                className="h-full rounded-full bg-amber-500 transition-all duration-500"
+                                style={{ width: `${Math.max(4, prodPct)}%` }}
+                              />
+                            </div>
+                          )}
+                        </div>
                       )}
 
                       {prodError && (

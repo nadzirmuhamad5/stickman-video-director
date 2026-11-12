@@ -51,12 +51,20 @@ export type JobClipProgress = {
   illustration?: string;
 };
 
+export type JobRenderProgress = { message: string; pct: number };
+
 export type JobProgress = {
   stage: "assets" | "render" | "done" | "error";
   message?: string;
   clips: Record<number, JobClipProgress>;
-  render?: { message: string; pct: number };
+  render?: JobRenderProgress;
   totalDuration?: number;
+  result?: {
+    duration: number;
+    videoUrl: string;
+    posterUrl: string;
+    srtUrl: string;
+  };
   updatedAt: string;
 };
 

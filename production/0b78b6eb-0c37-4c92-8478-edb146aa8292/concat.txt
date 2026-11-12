@@ -1,3 +1,0 @@
-file '/home/z/my-project/production/0b78b6eb-0c37-4c92-8478-edb146aa8292/seg-0.mp4'
-file '/home/z/my-project/production/0b78b6eb-0c37-4c92-8478-edb146aa8292/seg-1.mp4'
-file '/home/z/my-project/production/0b78b6eb-0c37-4c92-8478-edb146aa8292/seg-2.mp4'

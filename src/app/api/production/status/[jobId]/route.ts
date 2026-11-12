@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import { jobIdValid, jobDir, readProgress } from "@/lib/production";
+import { isJobRunning } from "@/lib/production-runner";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,5 +17,5 @@ export async function GET(
   }
   const progress = readProgress(jobId);
   const done = fs.existsSync(path.join(jobDir(jobId), "final.mp4"));
-  return NextResponse.json({ jobId, progress, done });
+  return NextResponse.json({ jobId, progress, done, running: isJobRunning(jobId) });
 }
