@@ -4,8 +4,8 @@ import { spawn } from "node:child_process";
 
 // ---------------------------------------------------------------------------
 // Production engine: turns an approved proposal into a fully rendered MP4
-// (AI illustration per clip + TTS narration + Ken Burns motion + burned-in
-// captions + audio mix), entirely on the server.
+// (AI illustration per clip + TTS narration + canvas-rendered motion +
+// burned-in captions + audio mix), entirely on the server.
 // ---------------------------------------------------------------------------
 
 export const PRODUCTION_DIR = path.join(process.cwd(), "production");
