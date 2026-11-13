@@ -1,5 +1,24 @@
 [
   {
+    "id": "cmwf6mk2y0000puvo2oato2x0",
+    "jobId": "6042a5c8-c212-4425-9042-34cc342f5578",
+    "mode": "B",
+    "title": "mengapa laut asin tapi hujan tidak",
+    "topic": "mengapa laut asin tapi hujan tidak",
+    "ratio": "9:16",
+    "styleCode": "B1",
+    "styleName": "Minimal Line Art",
+    "voice": "id-ID-ArdiNeural",
+    "narrationLang": "id",
+    "status": "done",
+    "stage": "done",
+    "proposalJson": null,
+    "resultJson": "{\"duration\":13.125011,\"videoUrl\":\"/api/media/6042a5c8-c212-4425-9042-34cc342f5578/final.mp4\",\"posterUrl\":\"/api/media/6042a5c8-c212-4425-9042-34cc342f5578/poster.jpg\",\"srtUrl\":\"/api/media/6042a5c8-c212-4425-9042-34cc342f5578/captions.srt\"}",
+    "durationSec": 13.125011,
+    "createdAt": "2026-11-13T16:19:27.658Z",
+    "updatedAt": "2026-11-13T16:21:33.926Z"
+  },
+  {
     "id": "cmwejef4n0000rivkbx2x1zc6",
     "jobId": "c049a15a-036e-412b-a6ef-0d67e2e1f68a",
     "mode": "B",
