@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { ensureVaultRestored } from "@/lib/vault";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic";
 /** Riwayat produksi — sumber restore setelah refresh (persisten di SQLite). */
 export async function GET() {
   try {
+    await ensureVaultRestored();
     const rows = await db.production.findMany({
       orderBy: { createdAt: "desc" },
       take: 24,

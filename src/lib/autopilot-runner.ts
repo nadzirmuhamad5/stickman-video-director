@@ -15,6 +15,7 @@ import {
 } from "@/lib/canvas-project";
 import { ensurePropImages, sanitizePropHint, stagePropsIntoCanvasDir } from "@/lib/prop-art";
 import { recordJobDone, recordJobError, recordJobStage, recordJobStart } from "@/lib/production-db";
+import { persistToVault } from "@/lib/vault";
 import { isJobRunning, jobLockPath, type RenderResult } from "@/lib/production-runner";
 
 // ---------------------------------------------------------------------------
@@ -510,6 +511,7 @@ async function runAutopilotInner(jobId: string, job: AutopilotJob): Promise<Rend
     result,
   });
   await recordJobDone(jobId, result);
+  void persistToVault(jobId); // mirror git-tracked agar riwayat lolos recycle
   return result;
 }
 

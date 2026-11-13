@@ -27,6 +27,7 @@ import {
   recordJobStage,
   recordJobStart,
 } from "@/lib/production-db";
+import { persistToVault } from "@/lib/vault";
 
 // ---------------------------------------------------------------------------
 // Server-driven production runner (Mode A · Director). The whole pipeline
@@ -260,6 +261,7 @@ export async function renderJob(jobId: string): Promise<RenderResult> {
       result,
     });
     await recordJobDone(jobId, result);
+    void persistToVault(jobId); // mirror git-tracked agar riwayat lolos recycle
     return result;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Kesalahan render tidak diketahui";

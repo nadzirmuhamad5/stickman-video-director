@@ -1,0 +1,40 @@
+[
+  {
+    "id": "cmwejef4n0000rivkbx2x1zc6",
+    "jobId": "c049a15a-036e-412b-a6ef-0d67e2e1f68a",
+    "mode": "B",
+    "title": "kenapa kucing selalu jatuh pada kaki nya",
+    "topic": "kenapa kucing selalu jatuh pada kaki nya",
+    "ratio": "9:16",
+    "styleCode": "B3",
+    "styleName": "Retro TV",
+    "voice": "id-ID-ArdiNeural",
+    "narrationLang": "id",
+    "status": "done",
+    "stage": "done",
+    "proposalJson": null,
+    "resultJson": "{\"duration\":19.75,\"videoUrl\":\"/api/media/c049a15a-036e-412b-a6ef-0d67e2e1f68a/final.mp4\",\"posterUrl\":\"/api/media/c049a15a-036e-412b-a6ef-0d67e2e1f68a/poster.jpg\",\"srtUrl\":\"/api/media/c049a15a-036e-412b-a6ef-0d67e2e1f68a/captions.srt\"}",
+    "durationSec": 19.75,
+    "createdAt": "2026-11-13T05:29:16.823Z",
+    "updatedAt": "2026-11-13T05:30:21.999Z"
+  },
+  {
+    "id": "vh-0b78b6eb-0c37-4c92-8",
+    "jobId": "0b78b6eb-0c37-4c92-8478-edb146aa8292",
+    "mode": "A",
+    "title": "Prokrastinasi: Musuh Tersembunyi",
+    "topic": null,
+    "ratio": "16:9",
+    "styleCode": "A1",
+    "styleName": "Hitam Putih Klasik (Klasik Minimalis)",
+    "voice": "tongtong",
+    "narrationLang": "id",
+    "status": "done",
+    "stage": "done",
+    "proposalJson": "{\"title\": \"Prokrastinasi: Musuh Tersembunyi\", \"logline\": \"Sebuah perjalanan visual yang mengungkap sifa sebenarnya dari prokrastinasi dan jalan keluarnya.\", \"ratio\": \"16:9\", \"durationSeconds\": 30, \"styleCode\": \"A1\", \"styleName\": \"Hitam Putih Klasik (Klasik Minimalis)\", \"voiceProfile\": \"Narator pria dengan suara rendah, tenang, dan berwibawa. Tempo bicara sedang, jeda yang terukur. Suara seperti narator dokumenter atau buku audio yang mendalam.\", \"bgm\": \"Minimalis, atmosferik. Piano melankolis dengan arpeggio yang lambat dan nada rendah yang muncul secara sporadik untuk menambah ketegangan tanpa mengalihkan perhatian.\", \"clips\": [{\"index\": 1, \"stage\": \"Golden Hook\", \"time\": \"[0-3s] ... [3-7s] ... [7-10s] ...\", \"narrationEn\": \"Your greatest enemy isn't the task, but the comfortable lie that you'll start tomorrow.\", \"narrationId\": \"Musuh terbesarmu bukan tugasnya, tapi kebohongan nyaman bahwa kamu akan memulainya besok.\", \"beats\": [\"[0-3s] Stickman duduk di depan meja, bermain game di ponselnya sambil mengabaikan tumpukan dokumen tebal di sebelahnya.\", \"[3-7s] Kamera memperluas untuk menunjukkan kalender di dinding, tanggal 'Hari D' sudah ditandai dengan lingkaran merah, tapi stickman tidak memperhatikannya.\", \"[7-10s] Ponsel tiba-tiba mati, stickman menatap dokumen dengan ekspresi bingung dan sedikit takut.\"], \"devices\": [\"Ponsel dengan layar terang\", \"Tumpukan dokumen tebal dengan simbol 'URGENT'\", \"Kalender dinding dengan 'Hari D' ditandai\", \"Jam dinding dengan jarai menunjukkan tengah hari\"], \"transition\": \"Stickman menarik napas dalam-dalam dan melihat tajam ke arah dokumen, si untuk bergerak.\"}, {\"index\": 2, \"stage\": \"Disrupting Assumptions → Unveiling Insider Secrets\", \"time\": \"[0-3s] ... [3-7s] ... [7-10s] ...\", \"narrationEn\": \"Procrastination isn't about laziness. It's a fear response, a shield against the fear of not being perfect.\", \"narrationId\": \"Prokrastinasi bukan tentang malas. Itu adalah respons takut, sebuah perisai melawan rasa takut tidak sempurna.\", \"beats\": [\"[0-3s] Stickman memegang pensil di atas dokumen, tapi tangan gemetar dan tak bisa menulis.\", \"[3-7s] Sebuah gelembung pikiran muncul di atas kepalanya, menunjukkan gambar dokumen yang sempurna dan diapresiasi oleh orang lain.\", \"[7-10s] Gelembung pecah, dan digantikan oleh gambar dokumen berantakan dan tatapan marah dari bos bayangan.\"], \"devices\": [\"Pensil yang dipegang dengan erat\", \"Tangan yang gemetar dan berkeringat\", \"Gelembung pikiran dengan gambar sempurna\", \"Bayangan bos dengan ekspresi marah\"], \"transition\": \"Bayangan bos menghilang, stickman menunduk, lalu tiba-tiba bangkit dengan keputusan.\"}, {\"index\": 3, \"stage\": \"Ultimate Truth Revelation → Elevation & Discussion\", \"time\": \"[0-3s] ... [3-7s] ... [7-10s] ...\", \"narrationEn\": \"The secret is to start ugly. Commit to just five minutes. Action defeats fear, every time.\", \"narrationId\": \"Rahasianya adalah memulai dengan jelek. Komitmen hanya untuk lima menit. Aksi mengalahkan takut, setiap saat.\", \"beats\": [\"[0-3s] Stickmen mengatur timer di ponselnya untuk 5 menit, lalu menghela napas lega.\", \"[3-7s] Dia mulai menulis dengan cepat dan penuh energi, garis-garisnya tidak sempurna tapi bergerak.\", \"[7-10s] Timer berbunyi, tapi stickman melanjutkan menulis dengan senyum puas di wajahnya.\"], \"devices\": [\"Ponsel dengan timer 5 menit\", \"Kertas dokumen dengan coretan pertama\", \"Jam dinding yang menunjukkan waktu berlalu\", \"Ekspresi wajah stickmen dari bingung menjadi fokus\"], \"transition\": \"Layar menjadi hitam, teks muncul: 'Bagaimana Anda memulai saat takut menunda?'\"}]}",
+    "resultJson": "{\"videoUrl\": \"/api/media/0b78b6eb-0c37-4c92-8478-edb146aa8292/final.mp4\", \"posterUrl\": \"/api/media/0b78b6eb-0c37-4c92-8478-edb146aa8292/poster.jpg\", \"srtUrl\": \"/api/media/0b78b6eb-0c37-4c92-8478-edb146aa8292/captions.srt\", \"duration\": 34.5, \"restored\": true}",
+    "durationSec": 34.5,
+    "createdAt": "2026-11-12T21:27:16.609Z",
+    "updatedAt": "2026-11-12T21:27:16.609Z"
+  }
+]

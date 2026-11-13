@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { ensureVaultRestored } from "@/lib/vault";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,7 @@ export async function GET(
 ) {
   const { jobId } = await params;
   try {
+    await ensureVaultRestored();
     const row = await db.production.findUnique({ where: { jobId } });
     if (!row) {
       return NextResponse.json({ error: "Produksi tidak ditemukan." }, { status: 404 });
