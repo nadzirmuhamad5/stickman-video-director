@@ -54,6 +54,31 @@ async function zaiChat(messages: ChatMsg[]): Promise<string> {
   return content;
 }
 
+/**
+ * ZAI dengan retry singkat: setelah recycle lingkungan, config token
+ * (/etc/.z-ai-config) bisa terisi ulang beberapa detik kemudian, jadi
+ * kegagalan awal (mis. 401 "missing X-Token") tidak boleh langsung membatalkan
+ * generasi narasi.
+ */
+async function zaiChatWithRetry(messages: ChatMsg[], attempts = 3): Promise<string> {
+  let lastErr: unknown = null;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      return await zaiChat(messages);
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts) {
+        const waitMs = 1500 * i; // 1.5s, 3s
+        console.warn(`[llm] ZAI attempt ${i}/${attempts} gagal, coba lagi dalam ${waitMs}ms: ${
+          err instanceof Error ? err.message.split("\n")[0] : err
+        }`);
+        await new Promise((r) => setTimeout(r, waitMs));
+      }
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
 export async function llmComplete(messages: ChatMsg[], opts: { timeoutMs?: number } = {}): Promise<LlmResult> {
   const stored = readGeminiKey();
   if (stored?.key) {
@@ -66,7 +91,7 @@ export async function llmComplete(messages: ChatMsg[], opts: { timeoutMs?: numbe
       );
     }
   }
-  const content = await zaiChat(messages);
+  const content = await zaiChatWithRetry(messages);
   return { content, engine: "zai" };
 }
 

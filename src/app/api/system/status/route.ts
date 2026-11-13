@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { execFile } from "child_process";
-import { join } from "path";
+import { join, delimiter } from "path";
 import { maskKey, readGeminiKey } from "@/lib/settings";
 import { getStatusCache, setStatusCache } from "@/lib/status-cache";
 
@@ -56,11 +56,16 @@ function checkEdgeTts(): Promise<{ ok: boolean; detail: string }> {
   const candidates = [process.env.EDGE_TTS_PYTHON, "/home/z/.venv/bin/python3", "python3"].filter(
     (p): p is string => Boolean(p)
   );
+  // edge-tts juga di-vendor di repo (vendor/python) agar lolos recycle lingkungan.
+  const vendorDir = join(process.cwd(), "vendor", "python");
+  const pyPath = [vendorDir, process.env.PYTHONPATH].filter(Boolean).join(delimiter);
   const probe = (bin: string) =>
     new Promise<boolean>((resolve) => {
-      execFile(bin, ["-c", "import edge_tts"], { timeout: 15_000, encoding: "utf8" }, (error) =>
-        resolve(!error)
-      );
+      execFile(bin, ["-c", "import edge_tts"], {
+        timeout: 15_000,
+        encoding: "utf8",
+        env: { ...process.env, PYTHONPATH: pyPath },
+      }, (error) => resolve(!error));
     });
   return (async () => {
     for (const bin of candidates) {

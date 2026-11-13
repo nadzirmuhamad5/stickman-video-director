@@ -38,7 +38,14 @@ export async function synthesizeTTS({ text, voiceId, outPath }: SynthesizeOption
 
 function runCapture(bin: string, args: string[], timeoutMs = 120_000): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+    // PYTHONPATH: paket edge-tts di-vendor di repo (vendor/python) supaya
+    // tetap ada setelah lingkungan di-recycle (venv di luar project ikut hilang).
+    const vendorDir = path.join(process.cwd(), "vendor", "python");
+    const pyPath = [vendorDir, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter);
+    const child = spawn(bin, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, PYTHONPATH: pyPath },
+    });
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => {
@@ -99,6 +106,11 @@ async function synthesizeEdge(text: string, voiceId: string, outPath: string): P
     if (stat.size < 2000) throw new Error("Audio Edge TTS terlalu pendek / kosong");
     // Transcode to a consistent PCM wav for the render pipeline.
     await runFfmpeg(["-i", tmp, "-ar", "44100", "-ac", "2", "-c:a", "pcm_s16le", outPath]);
+  } catch (err) {
+    // Reset probe cache agar percobaan berikutnya memindai ulang interpreter
+    // (mis. setelah recycle lingkungan paket venv bisa hilang).
+    pythonBinCache = null;
+    throw err;
   } finally {
     if (fs.existsSync(tmp)) fs.rmSync(tmp, { force: true });
   }
