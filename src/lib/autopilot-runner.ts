@@ -192,7 +192,7 @@ async function generateScript(
   const isEn = job.narrationLang === "en";
   const isB4 = job.styleB === "B4";
   // Bahasa Indonesia ~2.8 kata/dtk, Inggris ~2.3 kata/dtk pada TTS neural.
-  const sceneTarget = Math.max(3, Math.min(14, Math.round(job.durationSeconds / (isEn ? 10 : 8))));
+  const sceneTarget = Math.max(4, Math.min(14, Math.round(job.durationSeconds / (isEn ? 9 : 7.5))));
   const wordsPerScene = isEn ? 24 : 21;
   const totalWords = Math.round(job.durationSeconds * (isEn ? 2.3 : 2.8));
   const assetList = ALLOWED_ASSETS.map((a) => a.replace("@b1/", "")).join(", ");

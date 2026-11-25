@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { corsPreflight } from "@/lib/cors";
 import { clearGeminiKey, maskKey, readGeminiKey, saveGeminiKey } from "@/lib/settings";
 import { clearStatusCache } from "@/lib/status-cache";
 
@@ -51,4 +52,8 @@ export async function DELETE() {
   const removed = clearGeminiKey();
   clearStatusCache();
   return NextResponse.json({ ok: true, removed });
+}
+
+export async function OPTIONS() {
+  return corsPreflight();
 }

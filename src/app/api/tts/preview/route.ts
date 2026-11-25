@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { corsPreflight } from "@/lib/cors";
 import { getVoicePreview } from "@/lib/tts";
 
 export const runtime = "nodejs";
@@ -40,4 +41,8 @@ export async function POST(request: NextRequest) {
     console.error(`[tts/preview] failed: ${message}`);
     return NextResponse.json({ error: `Gagal membuat contoh suara: ${message}` }, { status: 502 });
   }
+}
+
+export async function OPTIONS() {
+  return corsPreflight();
 }

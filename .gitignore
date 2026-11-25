@@ -67,3 +67,4 @@ download/*.html
 /db/
 *.db
 *.db-journal
+.vercel-api-stash/

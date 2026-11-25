@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { corsPreflight } from "@/lib/cors";
 import fs from "node:fs";
 import path from "node:path";
 import { jobDir, jobIdValid } from "@/lib/production";
@@ -36,4 +37,8 @@ export async function POST(request: NextRequest) {
     void runProductionJob(jobId);
   }
   return NextResponse.json({ ok: true, alreadyRunning: false });
+}
+
+export async function OPTIONS() {
+  return corsPreflight();
 }

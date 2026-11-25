@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { corsPreflight } from "@/lib/cors";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -82,4 +83,8 @@ export async function POST(request: NextRequest) {
   void runAutopilotJob(id);
 
   return NextResponse.json({ jobId: id });
+}
+
+export async function OPTIONS() {
+  return corsPreflight();
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { corsPreflight } from "@/lib/cors";
 import ZAI from "z-ai-web-dev-sdk";
 import { llmComplete, extractJson } from "@/lib/gemini";
 
@@ -120,4 +121,8 @@ Respond with ONLY valid JSON: {"ideas": [{"title": string, "hook": string, "whyV
     const message = err instanceof Error ? err.message : "Gagal menghasilkan ide.";
     return NextResponse.json({ error: `Gagal menghasilkan ide: ${message}` }, { status: 500 });
   }
+}
+
+export async function OPTIONS() {
+  return corsPreflight();
 }

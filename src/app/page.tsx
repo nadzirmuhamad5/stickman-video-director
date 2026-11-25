@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { apiUrl, absUrl, getBackendOrigin, setBackendOrigin, isCrossOriginBackend } from "@/lib/api-base";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -58,6 +59,15 @@ type ProposalClip = {
   transition: string;
 };
 
+type ProposalScore = {
+  total: number;
+  hook: number;
+  story: number;
+  retensi: number;
+  klaritas: number;
+  tips: string[];
+};
+
 type Proposal = {
   title: string;
   logline: string;
@@ -68,6 +78,7 @@ type Proposal = {
   voiceProfile: string;
   bgm: string;
   clips: ProposalClip[];
+  score?: ProposalScore | null;
 };
 
 type ClipProd = {
@@ -202,11 +213,11 @@ export default function Home() {
   }
 
   useEffect(() => {
-    fetch("/api/system/status")
+    fetch(apiUrl("/api/system/status"))
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setStatus(d))
       .catch(() => setStatus(null));
-    fetch("/api/productions")
+    fetch(apiUrl("/api/productions"))
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setHistory(d?.productions ?? []))
       .catch(() => setHistory([]));
@@ -240,7 +251,7 @@ export default function Home() {
     }
     setPreviewing(true);
     try {
-      const res = await fetch("/api/tts/preview", {
+      const res = await fetch(apiUrl("/api/tts/preview"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ voiceId: voice, lang: narrationLang }),
@@ -273,13 +284,33 @@ export default function Home() {
   const [geminiBusy, setGeminiBusy] = useState(false);
   const [geminiMsg, setGeminiMsg] = useState<{ kind: "ok" | "warn" | "error"; text: string } | null>(null);
 
+  // Server produksi (backend origin) editor — untuk frontend yang di-host terpisah (mis. Vercel)
+  const [backendInput, setBackendInput] = useState("");
+  const [backendSaved, setBackendSaved] = useState(false);
+  useEffect(() => {
+    setBackendInput(getBackendOrigin());
+  }, []);
+
+  function saveBackendOrigin() {
+    setBackendOrigin(backendInput);
+    setBackendInput(getBackendOrigin());
+    setBackendSaved(true);
+    setTimeout(() => setBackendSaved(false), 2500);
+  }
+
+  function backendHint(): string {
+    return isCrossOriginBackend()
+      ? " Cek URL Server Produksi di panel Status; server yang baru menyala bisa butuh ±1 menit (cold start), lalu coba lagi."
+      : "";
+  }
+
   function patchStatusGemini(present: boolean, source: "env" | "file" | null, masked: string | null) {
     setStatus((prev) => (prev ? { ...prev, geminiKeyPresent: present, geminiKeySource: source, geminiKeyMasked: masked } : prev));
   }
 
   async function loadGeminiInfo(): Promise<{ present: boolean; masked: string | null; source: "env" | "file" | null } | null> {
     try {
-      const res = await fetch("/api/settings/gemini");
+      const res = await fetch(apiUrl("/api/settings/gemini"));
       if (!res.ok) return null;
       const d = await res.json();
       return { present: Boolean(d.present), masked: d.masked ?? null, source: d.source ?? null };
@@ -297,7 +328,7 @@ export default function Home() {
     setGeminiBusy(true);
     setGeminiMsg(null);
     try {
-      const res = await fetch("/api/settings/gemini", {
+      const res = await fetch(apiUrl("/api/settings/gemini"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key }),
@@ -326,7 +357,7 @@ export default function Home() {
     setGeminiBusy(true);
     setGeminiMsg(null);
     try {
-      const res = await fetch("/api/settings/gemini", { method: "DELETE" });
+      const res = await fetch(apiUrl("/api/settings/gemini"), { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) {
         setGeminiMsg({ kind: "error", text: data.error ?? "Gagal menghapus key." });
@@ -364,7 +395,7 @@ export default function Home() {
     setVideoResult(null);
     setProdPct(0);
     try {
-      const res = await fetch("/api/director/proposal", {
+      const res = await fetch(apiUrl("/api/director/proposal"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -382,7 +413,7 @@ export default function Home() {
         setProposal(data.proposal as Proposal);
       }
     } catch {
-      setError("Koneksi ke server gagal. Coba lagi.");
+      setError("Koneksi ke server gagal. Coba lagi." + backendHint());
     } finally {
       setLoading(false);
     }
@@ -402,7 +433,7 @@ export default function Home() {
       if (pollTokenRef.current !== token) return;
       let d: ProductionStatus | null = null;
       try {
-        const res = await fetch(`/api/production/status/${id}`);
+        const res = await fetch(apiUrl(`/api/production/status/${id}`));
         d = res.ok ? ((await res.json()) as ProductionStatus) : null;
       } catch {
         d = null; // gangguan jaringan sesaat — teruskan polling
@@ -483,7 +514,7 @@ export default function Home() {
     setProdPct(0);
     setClipProd(proposal.clips.map((c) => ({ index: c.index, status: "pending" as const })));
     try {
-      const res = await fetch("/api/production/start", {
+      const res = await fetch(apiUrl("/api/production/start"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ proposal, narrationLang, voice }),
@@ -515,7 +546,7 @@ export default function Home() {
     setProdMessage("Menyiapkan produksi autopilot…");
     setProdPct(0);
     try {
-      const res = await fetch("/api/autopilot/start", {
+      const res = await fetch(apiUrl("/api/autopilot/start"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -542,7 +573,7 @@ export default function Home() {
     setIdeasLoading(true);
     setIdeasError(null);
     try {
-      const res = await fetch("/api/ideas", {
+      const res = await fetch(apiUrl("/api/ideas"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ category: ideaCategory }),
@@ -565,7 +596,7 @@ export default function Home() {
 
   async function loadHistory() {
     try {
-      const res = await fetch("/api/productions");
+      const res = await fetch(apiUrl("/api/productions"));
       const d = res.ok ? await res.json() : null;
       setHistory(d?.productions ?? []);
     } catch {
@@ -584,7 +615,7 @@ export default function Home() {
     setProdPhase("assets");
     setProdMessage("Memuat produksi dari riwayat…");
     try {
-      const res = await fetch(`/api/productions/${item.jobId}`);
+      const res = await fetch(apiUrl(`/api/productions/${item.jobId}`));
       const d = await res.json();
       if (!res.ok) throw new Error(d.error ?? "Gagal memuat produksi.");
       if (item.mode === "A" && d.proposal) {
@@ -625,7 +656,7 @@ export default function Home() {
     setProdMessage("Melanjutkan produksi dari aset yang sudah ada…");
     setProdPct(0);
     try {
-      const res = await fetch("/api/production/resume", {
+      const res = await fetch(apiUrl("/api/production/resume"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobId }),
@@ -700,7 +731,7 @@ export default function Home() {
                 <div className="relative h-12 w-20 shrink-0 overflow-hidden rounded-md bg-stone-900">
                   {p.illustration ? (
                     <img
-                      src={p.illustration}
+                      src={absUrl(p.illustration)}
                       alt={`Ilustrasi klip ${p.index}`}
                       className="h-full w-full object-cover"
                     />
@@ -764,19 +795,19 @@ export default function Home() {
           <div className="space-y-3">
             <video
               key={videoResult.videoUrl}
-              src={videoResult.videoUrl}
-              poster={videoResult.posterUrl}
+              src={absUrl(videoResult.videoUrl)}
+              poster={absUrl(videoResult.posterUrl)}
               controls
               className="w-full rounded-xl border border-border bg-black"
             />
             <div className="flex flex-wrap gap-2">
               <Button asChild size="sm" className="bg-amber-500 text-stone-950 hover:bg-amber-400">
-                <a href={`${videoResult.videoUrl}?download=1`}>
+                <a href={`${absUrl(videoResult.videoUrl)}?download=1`}>
                   <Download className="mr-2 h-4 w-4" /> Unduh MP4 ({videoResult.duration.toFixed(0)} dtk)
                 </a>
               </Button>
               <Button asChild size="sm" variant="outline">
-                <a href={`${videoResult.srtUrl}?download=1`}>
+                <a href={`${absUrl(videoResult.srtUrl)}?download=1`}>
                   <FileText className="mr-2 h-4 w-4" /> Subtitle SRT
                 </a>
               </Button>
@@ -1371,6 +1402,47 @@ export default function Home() {
                     </div>
                   </div>
 
+                  {proposal.score && (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Lightbulb className="h-4 w-4 text-amber-500" />
+                        <span className="text-sm font-semibold">Penilaian AI</span>
+                        <Badge className={proposal.score.total >= 75 ? "bg-green-600 text-white" : proposal.score.total >= 60 ? "bg-amber-500 text-stone-950" : "bg-red-600 text-white"}>
+                          Skor {proposal.score.total}/100
+                        </Badge>
+                      </div>
+                      <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+                        {([
+                          ["Hook 3 detik pertama", proposal.score.hook],
+                          ["Alur cerita", proposal.score.story],
+                          ["Potensi retensi", proposal.score.retensi],
+                          ["Klaritas pesan", proposal.score.klaritas],
+                        ] as const).map(([label, val]) => (
+                          <div key={label}>
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span>{label}</span>
+                              <span className="font-mono">{val}</span>
+                            </div>
+                            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-stone-800">
+                              <div
+                                className={`h-full rounded-full ${val >= 75 ? "bg-green-500" : val >= 60 ? "bg-amber-500" : "bg-red-500"}`}
+                                style={{ width: `${Math.max(3, val)}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {proposal.score.tips.length > 0 && (
+                        <div className="mt-3 space-y-1 border-t border-border/60 pt-2.5">
+                          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Saran perbaikan</p>
+                          {proposal.score.tips.map((t, i) => (
+                            <p key={i} className="text-xs leading-relaxed text-muted-foreground">• {t}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="max-h-[32rem] space-y-3 overflow-y-auto pr-1 [scrollbar-width:thin]">
                     {proposal.clips.map((c) => (
                       <Card key={c.index} className="border-border/70">
@@ -1507,6 +1579,32 @@ export default function Home() {
               )}
               {status && (
                 <>
+                  <div className="rounded-xl border border-border/70 bg-background px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      {isCrossOriginBackend() ? (
+                        <CircleCheck className="h-5 w-5 shrink-0 text-green-500" />
+                      ) : (
+                        <CircleAlert className="h-5 w-5 shrink-0 text-amber-500" />
+                      )}
+                      <span className="text-sm font-medium">Server produksi (backend video)</span>
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                      {isCrossOriginBackend()
+                        ? <>API diarahkan ke <code className="rounded bg-stone-800 px-1 py-0.5">{getBackendOrigin()}</code></>
+                        : "Frontend & API berjalan di origin yang sama. Jika frontend ini di-host terpisah (mis. Vercel), isi URL server produksi di bawah — server bisa butuh ±1 menit untuk menyala saat pertama dibuka."}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Input
+                        value={backendInput}
+                        onChange={(e) => setBackendInput(e.target.value)}
+                        placeholder="https://preview-xxxx.space-z.ai"
+                        className="h-8 max-w-md flex-1 text-xs"
+                      />
+                      <Button size="sm" className="h-8" onClick={saveBackendOrigin}>
+                        {backendSaved ? "Tersimpan ✓" : "Simpan"}
+                      </Button>
+                    </div>
+                  </div>
                   {status.doctor.map((c) => (
                     <div
                       key={c.label}
