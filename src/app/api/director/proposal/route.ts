@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Topik atau materi sumber wajib diisi." }, { status: 400 });
   }
   if (!styleCode || !styleName) {
-    return NextResponse.json({ error: "Pilih salah satu gaya visual A1–A5." }, { status: 400 });
+    return NextResponse.json({ error: "Pilih salah satu gaya visual A1–A7." }, { status: 400 });
   }
   if (!Number.isFinite(durationSeconds) || durationSeconds < 10 || durationSeconds > 600) {
     return NextResponse.json({ error: "Durasi harus 10–600 detik." }, { status: 400 });

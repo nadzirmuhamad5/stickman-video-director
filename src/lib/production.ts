@@ -86,6 +86,10 @@ const STYLE_IMAGE_BASE: Record<string, string> = {
   A3: "prehistoric cave cartoon illustration, expressive white cartoon head with simple black stick limbs, animal fur costume, earthy stone-age cave setting with warm firelight, comedic exaggeration, storyboard still frame",
   A4: "warm cozy 2D cartoon illustration, full color, soft rounded shapes, gentle warm lighting, inviting storybook everyday-life scene, cheerful atmosphere, storyboard still frame",
   A5: "historical cel-shaded cartoon illustration, expressive white-faced character with short neck in period clothing, flat colors with comic shading, era-accurate background props, storyboard still frame",
+  // A7 "Issei Kolase": kolase dokumenter di atas kertas tua — potongan foto
+  // orang hitam-putih ber-outline putih (ala Issei Nugroho), stickman sebagai
+  // pemandu, anotasi tinta merah, grain film arsip.
+  A7: "vintage documentary collage illustration on aged sepia paper background with visible paper fibers and archival film grain, real black-and-white halftone photograph cutouts of people with rough scissor-cut edges highlighted by a bold hand-drawn white outline glow, one simple black stick figure with round head standing among the cutouts pointing at them, red ink circles arrows and rough underlines drawn over the cutouts, torn paper strips and adhesive tape corners pinning the photos, faded archival tones with one warm accent, flat 2D layered collage composition, storyboard still frame",
 };
 
 export function styleImageBase(styleCode: string): string {
@@ -98,9 +102,16 @@ export function styleImageBase(styleCode: string): string {
 export function buildScenePrompt(proposal: Proposal, clip: ProposalClip): string {
   const devices = clip.devices.slice(0, 6).join("; ");
   const scene = clip.narrationEn.replace(/["']/g, "").trim();
+  // Intro A7: potongan orang utama muncul di-highlight lalu fade in — signature
+  // gaya kolase, jadi frame pertama wajib berisi subjek potongan besar.
+  const intro =
+    proposal.styleCode === "A7" && clip.index === 1
+      ? "INTRO SHOT: the main person appears as a large bold photo cutout highlighted with a rough white outline at the center, surrounded by smaller faded cutouts emerging from the aged paper, dramatic focal point."
+      : "";
   const parts = [
     `Single illustration for one shot of an animated explainer video.`,
     `Scene: ${scene}.`,
+    intro,
     devices ? `Must include these visual elements: ${devices}.` : "",
     `Visual style: ${styleImageBase(proposal.styleCode)}.`,
     `Aspect ratio ${proposal.ratio}.`,

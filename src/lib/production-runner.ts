@@ -79,9 +79,13 @@ async function generateClipImage(job: ProductionJob, clip: ProposalClip, imagePa
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const zai = await ZAI.create();
+      // API live menuntut ukuran kelipatan 32 (kode 1214): 720x1440 DITOLAK
+      // walau masih ada di union tipe SDK (daftar usang). 704x1408 = rasio
+      // 1:2 yang sah, terbukti lewat uji nyata.
+      const imageSize = job.proposal.ratio === "9:16" ? "704x1408" : "1344x768";
       const response = await zai.images.generations.create({
         prompt: scenePrompt,
-        size: job.proposal.ratio === "9:16" ? "720x1440" : "1344x768",
+        size: imageSize as "1344x768",
       });
       const base64 = response.data?.[0]?.base64;
       if (!base64) throw new Error("Respons image generation kosong");

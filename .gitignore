@@ -72,3 +72,6 @@ download/*.html
 # python bytecode
 __pycache__/
 *.pyc
+
+# artefak riset lokal
+research/

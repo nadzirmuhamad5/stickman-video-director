@@ -61,6 +61,15 @@ export const STYLES: StickmanStyle[] = [
     selectable: true,
   },
   {
+    code: "A7",
+    name: "Issei Kolase",
+    mode: "A",
+    tagline: "Dokumenter Kolase",
+    desc: "Kolase dokumenter di atas kertas tua: potongan foto orang hitam-putih ber-outline putih yang fade in, anotasi tinta merah, caption kapital tebal. Intro mengikuti gaya Issei Nugroho — subjek utama muncul sebagai potongan yang di-highlight.",
+    previews: [{ src: "/previews/style-7-issei-collage.png", label: "A7 · Kolase dokumenter" }],
+    selectable: true,
+  },
+  {
     code: "A6",
     name: "Amber Noir",
     mode: "A",

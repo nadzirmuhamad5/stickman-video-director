@@ -382,7 +382,7 @@ export default function Home() {
     }
     const style = SELECTABLE_STYLES.find((s) => s.code === selectedStyle);
     if (!style) {
-      setError("Pilih salah satu gaya A1–A5.");
+      setError("Pilih salah satu gaya A1–A7.");
       return;
     }
     setLoading(true);
@@ -971,19 +971,25 @@ export default function Home() {
           <div className="mx-auto max-w-6xl px-4 py-14">
             <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">Pilih gaya visual</h2>
             <p className="mx-auto mt-2 max-w-xl text-center text-sm text-muted-foreground">
-              Semua contoh di bawah adalah sampel asli dari repo. Klik <em>Pilih</em> pada gaya A1–A5 untuk memakainya
+              Semua contoh di bawah adalah sampel asli dari repo. Klik <em>Pilih</em> pada gaya A1–A7 untuk memakainya
               di Studio Director.
             </p>
             <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {STYLES.map((s) => (
                 <Card key={s.code} className="group overflow-hidden border-border/70 pt-0">
                   <div className="relative aspect-video overflow-hidden bg-stone-950">
-                    <img
-                      src={s.previews[0].src}
-                      alt={`Contoh gaya ${s.code} — ${s.name}`}
-                      loading="lazy"
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-                    />
+                    {s.previews[0] ? (
+                      <img
+                        src={s.previews[0].src}
+                        alt={`Contoh gaya ${s.code} — ${s.name}`}
+                        loading="lazy"
+                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs text-stone-500">
+                        Contoh segera hadir
+                      </div>
+                    )}
                     <span className="absolute left-2 top-2 rounded-md bg-stone-950/80 px-2 py-0.5 text-xs font-bold text-amber-500 backdrop-blur">
                       {s.code}
                     </span>

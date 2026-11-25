@@ -67,6 +67,8 @@ type Shot = { start: number; end: number; layers: Layer[] };
 type CanvasProject = {
   version: 1;
   style: "B1" | "B2" | "B3" | "B4";
+  /** A7 "Issei Kolase": kertas tua + caption kapital tebal di atas gaya B2. */
+  collage?: boolean;
   width: number;
   height: number;
   fps: number;
@@ -102,11 +104,15 @@ const INK = "#191916";
 const INK_WARM = "#3a3428";
 
 export function styleToCanvas(styleCode: string): { style: "B1" | "B2"; ink: string } {
-  // A1/A2 → B1 (pure white, dark ink); A3–A5 → B2 (warm cream, warm ink).
+  // A1/A2 → B1 (pure white, dark ink); A3–A5 → B2 (warm cream, warm ink);
+  // A7 (Issei Kolase) → B2 + flag collage (kertas tua, ditangani renderer).
   return styleCode === "A1" || styleCode === "A2"
     ? { style: "B1", ink: INK }
     : { style: "B2", ink: INK_WARM };
 }
+
+/** Tinta aksen A7: merah dokumen ala anotasi kolase (lingkaran/garis/panah). */
+const ACCENT_RED = "#b3382c";
 
 function planeFor(ratio: string): { width: number; height: number; planeW: number; planeH: number } {
   return ratio === "9:16"
@@ -290,6 +296,7 @@ export function buildClipCanvasProject(input: ClipCanvasInput): {
   const tail = Math.max(0.15, Math.min(0.7, 12.5 - input.audioDuration - lead));
   const duration = input.audioDuration + lead + tail;
   const { style, ink } = styleToCanvas(input.styleCode);
+  const isCollage = input.styleCode === "A7";
   const plane = planeFor(input.ratio);
   const span = duration;
 
@@ -298,18 +305,25 @@ export function buildClipCanvasProject(input: ClipCanvasInput): {
   const imgW = plane.planeW * 1.1;
   const imgH =
     input.ratio === "9:16"
-      ? imgW * 2 // generated portrait assets are 720x1440 (1:2)
+      ? imgW * 2 // generated portrait assets are 704x1408 (1:2)
       : (imgW * 768) / 1344; // landscape assets are 1344x768
   const xRange = input.ratio === "9:16" ? 110 : 56;
   const yRange = input.ratio === "9:16" ? 240 : 34;
 
-  const layers: Layer[] = [
-    {
-      type: "image",
-      path: `../../assets/clip-${input.index}.png`,
-      w: imgW,
-      h: imgH,
-      keys: normalizeKeys(
+  // A7: fade-in lebih panjang (potongan "menyala" dari kertas) + settle-zoom
+  // halus di detik pertama; klip 1 (intro) paling dramatis.
+  const imageKeys = isCollage
+    ? normalizeKeys(
+        [
+          { t: 0, alpha: 0, w: input.index === 1 ? imgW * 0.93 : imgW * 0.965 },
+          { t: input.index === 1 ? 1.1 : 0.8, alpha: 1, w: imgW * 1.02 },
+          { t: 1.8, w: imgW },
+          { t: span * 0.55, x: -xRange * 0.75, y: -yRange * 0.8 },
+          { t: span, x: -xRange, y: -yRange * 0.35 },
+        ],
+        span
+      )
+    : normalizeKeys(
         [
           { t: 0, alpha: 0.25, x: -xRange * 0.4, y: -yRange * 0.3 },
           { t: 0.5, alpha: 1 },
@@ -317,9 +331,17 @@ export function buildClipCanvasProject(input: ClipCanvasInput): {
           { t: span, x: -xRange, y: -yRange * 0.35 },
         ],
         span
-      ),
+      );
+
+  const layers: Layer[] = [
+    {
+      type: "image",
+      path: `../../assets/clip-${input.index}.png`,
+      w: imgW,
+      h: imgH,
+      keys: imageKeys,
     },
-    ...accentLayers(input.index, span, plane.planeW, plane.planeH, ink),
+    ...accentLayers(input.index, span, plane.planeW, plane.planeH, isCollage ? ACCENT_RED : ink),
   ];
 
   if (input.index === 1 && input.title && span >= 2.4) {
@@ -353,6 +375,7 @@ export function buildClipCanvasProject(input: ClipCanvasInput): {
   const project: CanvasProject = {
     version: 1,
     style,
+    ...(isCollage ? { collage: true } : {}),
     width: plane.width,
     height: plane.height,
     fps: CANVAS_FPS,
