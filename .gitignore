@@ -68,3 +68,7 @@ download/*.html
 *.db
 *.db-journal
 .vercel-api-stash/
+
+# python bytecode
+__pycache__/
+*.pyc
