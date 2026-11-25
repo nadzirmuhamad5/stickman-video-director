@@ -105,8 +105,8 @@ export const STYLES: StickmanStyle[] = [
 export const SELECTABLE_STYLES = STYLES.filter((s) => s.selectable);
 
 export const DURATIONS = [
-  { seconds: 30, clips: 3, label: "30 detik" },
-  { seconds: 60, clips: 6, label: "60 detik" },
-  { seconds: 90, clips: 9, label: "90 detik" },
+  { seconds: 30, clips: 4, label: "30 detik" },
+  { seconds: 60, clips: 8, label: "60 detik" },
+  { seconds: 90, clips: 11, label: "90 detik" },
   { seconds: 120, clips: 12, label: "2 menit" },
 ];

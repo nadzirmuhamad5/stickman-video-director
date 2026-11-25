@@ -66,6 +66,29 @@ function coerceScore(raw: unknown): ProposalScore | null {
   };
 }
 
+/**
+ * Normalisasi beats. LLM kadang mengirim beats sebagai satu string
+ * ("[0-2s] ... [2-4s] ...") alih-alih array — pecah di penanda waktu [Ns].
+ */
+function coerceBeats(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((b) => String(b).trim()).filter(Boolean);
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    const timed = raw
+      .split(/(?=\[\d)/)
+      .map((b) => b.trim())
+      .filter(Boolean);
+    if (timed.length >= 2) return timed;
+    const lined = raw
+      .split(/\n+|;\s*/)
+      .map((b) => b.trim())
+      .filter(Boolean);
+    return lined.length >= 2 ? lined : [raw.trim()];
+  }
+  return [];
+}
+
 function coerceProposal(data: unknown, ctx: { styleCode: string; styleName: string; ratio: string; durationSeconds: number }): Proposal {
   const d = data as Record<string, unknown>;
   const rawClips = Array.isArray(d.clips) ? (d.clips as Record<string, unknown>[]) : [];
@@ -75,7 +98,7 @@ function coerceProposal(data: unknown, ctx: { styleCode: string; styleName: stri
     time: typeof c.time === "string" ? c.time : `${i * 10}-${(i + 1) * 10}s`,
     narrationEn: typeof c.narrationEn === "string" ? c.narrationEn : "",
     narrationId: typeof c.narrationId === "string" ? c.narrationId : "",
-    beats: Array.isArray(c.beats) ? c.beats.map(String) : [],
+    beats: coerceBeats(c.beats),
     devices: Array.isArray(c.devices) ? c.devices.map(String) : [],
     transition: typeof c.transition === "string" ? c.transition : "",
   }));
@@ -92,6 +115,17 @@ function coerceProposal(data: unknown, ctx: { styleCode: string; styleName: stri
     clips,
     score: coerceScore(d.score),
   };
+}
+
+/**
+ * Gerbang kualitas: minimal N-1 klip punya beats (≥2) dan narasi.
+ * Kalau di bawah ambang, attempt dianggap gagal dan dicoba ulang.
+ */
+function proposalQualityOk(p: Proposal): boolean {
+  if (p.clips.length === 0) return false;
+  const withBeats = p.clips.filter((c) => c.beats.length >= 2).length;
+  const withNarration = p.clips.filter((c) => c.narrationId.trim().length > 0).length;
+  return withBeats >= p.clips.length - 1 && withNarration >= p.clips.length - 1;
 }
 
 export async function POST(request: NextRequest) {
@@ -117,7 +151,13 @@ export async function POST(request: NextRequest) {
   if (!Number.isFinite(durationSeconds) || durationSeconds < 10 || durationSeconds > 600) {
     return NextResponse.json({ error: "Durasi harus 10–600 detik." }, { status: 400 });
   }
-  const clipCount = Math.max(3, Math.min(12, Math.round(durationSeconds / 8)));
+  // Jumlah klip: ikut permintaan user (3–12) bila valid, kalau tidak "auto"
+  // = durasi ÷ ±8 detik per klip.
+  const reqClipCount = Number(body.clipCount);
+  const clipCount =
+    Number.isInteger(reqClipCount) && reqClipCount >= 3 && reqClipCount <= 12
+      ? reqClipCount
+      : Math.max(3, Math.min(12, Math.round(durationSeconds / 8)));
 
   const MAX_ATTEMPTS = 3;
   let lastError = "Unknown error";
@@ -126,7 +166,14 @@ export async function POST(request: NextRequest) {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       const outcome = await attemptProposal({ styleCode, styleName, ratio, durationSeconds, topic, clipCount });
       if (typeof outcome === "object") {
-        return NextResponse.json({ proposal: outcome });
+        if (proposalQualityOk(outcome)) {
+          return NextResponse.json({ proposal: outcome });
+        }
+        const withBeats = outcome.clips.filter((c) => c.beats.length >= 2).length;
+        const withNarration = outcome.clips.filter((c) => c.narrationId.trim().length > 0).length;
+        lastError = `beats/narasi kosong (${withBeats}/${outcome.clips.length} beats, ${withNarration}/${outcome.clips.length} narasi)`;
+        console.error(`[director/proposal] attempt ${attempt}/${MAX_ATTEMPTS} rejected: ${lastError}`);
+        continue;
       }
       lastError = outcome;
       console.error(`[director/proposal] attempt ${attempt}/${MAX_ATTEMPTS} failed: ${outcome}`);

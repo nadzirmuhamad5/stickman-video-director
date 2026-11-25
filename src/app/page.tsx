@@ -159,6 +159,8 @@ export default function Home() {
   const [topic, setTopic] = useState("");
   const [ratio, setRatio] = useState<"16:9" | "9:16">("16:9");
   const [durationSeconds, setDurationSeconds] = useState<number>(60);
+  // "auto" = ikut durasi (±8 dtk/klip), atau "3".."12" untuk jumlah klip tetap (Mode A)
+  const [clipCountSel, setClipCountSel] = useState<string>("auto");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [proposal, setProposal] = useState<Proposal | null>(null);
@@ -402,6 +404,7 @@ export default function Home() {
           topic,
           ratio,
           durationSeconds,
+          clipCount: clipCountSel === "auto" ? undefined : Number(clipCountSel),
           styleCode: style.code,
           styleName: `${style.name} (${style.tagline})`,
         }),
@@ -419,7 +422,10 @@ export default function Home() {
     }
   }
 
-  const clipCount = Math.round(durationSeconds / 10);
+  // Jumlah klip efektif Mode A: pilihan user atau auto (durasi ÷ ±8 dtk)
+  const clipCount =
+    clipCountSel === "auto" ? Math.max(3, Math.min(12, Math.round(durationSeconds / 8))) : Number(clipCountSel);
+  const perClipSeconds = Math.round(durationSeconds / clipCount);
 
   // ---------------------------------------------------------------------
   // Produksi berjalan SEPENUHNYA di server (background). Client hanya
@@ -1150,7 +1156,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className={mode === "A" ? "grid grid-cols-1 gap-3 sm:grid-cols-3" : "grid grid-cols-2 gap-3"}>
                   <div className="space-y-2">
                     <Label>Durasi</Label>
                     <Select value={String(durationSeconds)} onValueChange={(v) => setDurationSeconds(Number(v))}>
@@ -1167,21 +1173,39 @@ export default function Home() {
                     </Select>
                   </div>
                   {mode === "A" ? (
-                    <div className="space-y-2">
-                      <Label>Gaya visual</Label>
-                      <Select value={selectedStyle} onValueChange={setSelectedStyle}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Pilih gaya" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {SELECTABLE_STYLES.map((s) => (
-                            <SelectItem key={s.code} value={s.code}>
-                              {s.code} — {s.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <>
+                      <div className="space-y-2">
+                        <Label>Jumlah klip</Label>
+                        <Select value={clipCountSel} onValueChange={setClipCountSel}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Jumlah klip" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="auto">Auto ({clipCount} klip)</SelectItem>
+                            {[3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
+                              <SelectItem key={n} value={String(n)}>
+                                {n} klip × ±{Math.round(durationSeconds / n)} dtk
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Gaya visual</Label>
+                        <Select value={selectedStyle} onValueChange={setSelectedStyle}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Pilih gaya" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SELECTABLE_STYLES.map((s) => (
+                              <SelectItem key={s.code} value={s.code}>
+                                {s.code} — {s.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </>
                   ) : (
                     <div className="space-y-2">
                       <Label>Gaya Autopilot</Label>
@@ -1307,7 +1331,7 @@ export default function Home() {
                       )}
                     </Button>
                     <p className="text-center text-[11px] text-muted-foreground">
-                      {clipCount} klip × ±10 detik · narasi ±{clipCount * 22} kata
+                      {clipCount} klip × ±{perClipSeconds} detik · narasi ±{Math.round(durationSeconds * 2.2)} kata
                     </p>
                   </>
                 ) : (
