@@ -1,0 +1,3 @@
+Caption-Bold.ttf is Liberation Sans Bold, (c) Red Hat and others,
+licensed under the SIL Open Font License 1.1.
+https://github.com/liberationfonts/liberation-fonts
